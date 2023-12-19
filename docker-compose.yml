@@ -1,0 +1,18 @@
+services:
+  behide-online-services:
+    build: .
+    container_name: behide-online-services
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.bos-https.rule=(Host(`bos.titaye.dev`))
+      - traefik.http.routers.bos-https.tls=true
+      - traefik.http.routers.bos-https.tls.certresolver=myresolver
+      - traefik.http.routers.bos.rule=(Host(`bos.titaye.dev`))
+
+    networks:
+      - web
+    restart: unless-stopped
+
+networks:
+  web:
+    external: true
