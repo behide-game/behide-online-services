@@ -21,6 +21,8 @@ type OfferId =
 type RoomId =
     private | RoomId of string
 
+    override this.ToString() = this |> RoomId.raw
+
     static member raw (RoomId str) = str
 
     static let chars = "abcdefghijklmnopqrstuvwxyz0123456789".ToCharArray()

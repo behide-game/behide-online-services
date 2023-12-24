@@ -7,9 +7,9 @@ open FsToolkit.ErrorHandling
 
 
 type ISignalingClient =
-    abstract member CreateOffer : unit -> Task<OfferId option>
-    abstract member SdpAnswerReceived: sdpDescription: SdpDescription -> Task
-    abstract member IceCandidateReceived: iceCandidate: IceCandidate -> Task
+    abstract member CreateOffer : unit -> Task<struct(int * OfferId) option>
+    abstract member SdpAnswerReceived: OfferId -> SdpDescription -> Task
+    abstract member IceCandidateReceived: OfferId -> IceCandidate -> Task
 
 type SignalingHub(offerStore: Store.IStore<OfferId, SdpDescription>, roomStore: Store.IStore<RoomId, Room>) =
     inherit Hub<ISignalingClient>()
@@ -25,20 +25,27 @@ type SignalingHub(offerStore: Store.IStore<OfferId, SdpDescription>, roomStore: 
 
             return offerId
         }
+        |> Task.map (function
+            | Some offerId -> Ok offerId
+            | None -> Error "Failed to create offer")
 
-    member hub.GetOffer offerId = task {
-        do! hub.Groups.AddToGroupAsync (hub.Context.ConnectionId, offerId |> OfferId.raw)
-        return offerStore.Get offerId
-    }
+    member hub.GetOffer offerId =
+        task {
+            do! hub.Groups.AddToGroupAsync (hub.Context.ConnectionId, offerId |> OfferId.raw)
+            return offerStore.Get offerId
+        }
+        |> Task.map (function
+            | Some offerId -> Ok offerId
+            | None -> Error "Offer not found")
 
     member hub.SendAnswer offerId sdpAnswer =
-        hub.Clients.OthersInGroup(offerId |> OfferId.raw).SdpAnswerReceived(sdpAnswer)
+        task {
+            do! hub.Clients.OthersInGroup(offerId |> OfferId.raw).SdpAnswerReceived offerId sdpAnswer
+            offerStore.Remove offerId |> ignore
+        } :> Task
 
     member hub.SendIceCandidate offerId iceCandidate =
-        hub.Clients.OthersInGroup(offerId |> OfferId.raw).IceCandidateReceived iceCandidate
-
-    member _.DeleteOffer offerId =
-        offerStore.Remove offerId |> Task.singleton
+        hub.Clients.OthersInGroup(offerId |> OfferId.raw).IceCandidateReceived offerId iceCandidate
 
     // --- Rooms ---
     member hub.CreateRoom() =
@@ -51,11 +58,22 @@ type SignalingHub(offerStore: Store.IStore<OfferId, SdpDescription>, roomStore: 
 
             return roomId
         }
+        |> Task.map (function
+            | Some roomId -> Ok roomId
+            | None -> Error "Failed to create room")
 
     member hub.JoinRoom(roomId) =
-        taskOption {
-            let! room = roomStore.Get roomId
+        taskResult {
+            let! room =
+                roomStore.Get roomId
+                |> function
+                    | Some room -> Ok room
+                    | None -> Error "Room not found"
             let hostConnId = room.HostConnectionId
 
-            return! hub.Clients.Client(hostConnId).CreateOffer()
+            let! offerOpt = hub.Clients.Client(hostConnId).CreateOffer()
+
+            match offerOpt with
+            | Some offer -> return offer
+            | None -> return! Error "Failed to create offer"
         }
