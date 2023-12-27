@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="./Behide.OnlineServices.Types/Behide.OnlineServices.Types.fsproj" />
+    <Compile Include="Helpers.fs" />
     <Compile Include="Stores.fs" />
     <Compile Include="Hubs/Signaling.fs" />
     <Compile Include="Program.fs" />
@@ -11,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Falco" Version="4.*" />
     <PackageReference Include="FSharp.SystemTextJson" Version="1.2.42" />
-    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="4.9.0" />
+    <PackageReference Include="FsToolkit.ErrorHandling" Version="4.13.0" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="4.13.0" />
   </ItemGroup>
 </Project>

@@ -7,73 +7,94 @@ open FsToolkit.ErrorHandling
 
 
 type ISignalingClient =
-    abstract member CreateOffer : unit -> Task<struct(int * OfferId) option>
+    abstract member CreateOffer : int -> Task<OfferId option>
     abstract member SdpAnswerReceived: OfferId -> SdpDescription -> Task
     abstract member IceCandidateReceived: OfferId -> IceCandidate -> Task
 
 type SignalingHub(offerStore: Store.IStore<OfferId, SdpDescription>, roomStore: Store.IStore<RoomId, Room>) =
     inherit Hub<ISignalingClient>()
 
+    // Called by OfferPeer
     member hub.AddOffer sdp =
-        taskOption {
+        taskResult {
             let offerId = OfferId.create()
 
             do! offerStore.Add offerId sdp
-                |> function true -> Some () | false -> None
+                |> Result.requireTrue "Failed to create offer"
 
             do! hub.Groups.AddToGroupAsync (hub.Context.ConnectionId, offerId |> OfferId.raw)
 
             return offerId
         }
-        |> Task.map (function
-            | Some offerId -> Ok offerId
-            | None -> Error "Failed to create offer")
 
+    // Called by AnswerPeer
     member hub.GetOffer offerId =
         task {
             do! hub.Groups.AddToGroupAsync (hub.Context.ConnectionId, offerId |> OfferId.raw)
-            return offerStore.Get offerId
+            return
+                offerStore.Get offerId
+                |> Result.ofOption "Offer not found"
         }
-        |> Task.map (function
-            | Some offerId -> Ok offerId
-            | None -> Error "Offer not found")
+
+    member hub.EndConnectionAttempt offerId =
+        task {
+            printfn "%A ended" offerId
+            offerStore.Remove offerId |> ignore
+            do! hub.Groups.RemoveFromGroupAsync (hub.Context.ConnectionId, offerId |> OfferId.raw)
+        }
 
     member hub.SendAnswer offerId sdpAnswer =
-        task {
-            do! hub.Clients.OthersInGroup(offerId |> OfferId.raw).SdpAnswerReceived offerId sdpAnswer
-            offerStore.Remove offerId |> ignore
-        } :> Task
+        hub.Clients.OthersInGroup(offerId |> OfferId.raw).SdpAnswerReceived offerId sdpAnswer
 
     member hub.SendIceCandidate offerId iceCandidate =
         hub.Clients.OthersInGroup(offerId |> OfferId.raw).IceCandidateReceived offerId iceCandidate
 
     // --- Rooms ---
     member hub.CreateRoom() =
-        taskOption {
+        taskResult {
             let connId = hub.Context.ConnectionId
             let roomId = RoomId.create()
 
-            do! roomStore.Add roomId { RoomId = roomId; HostConnectionId = connId }
-                |> function true -> Some () | false -> None
+            do! { RoomId = roomId
+                  PlayersConnectionId = [| 1, connId |] } // Host peer id should always be 1
+                |> roomStore.Add roomId
+                |> Result.requireTrue "Failed to create room"
 
             return roomId
         }
-        |> Task.map (function
-            | Some roomId -> Ok roomId
-            | None -> Error "Failed to create room")
 
     member hub.JoinRoom(roomId) =
         taskResult {
-            let! room =
-                roomStore.Get roomId
-                |> function
-                    | Some room -> Ok room
-                    | None -> Error "Room not found"
-            let hostConnId = room.HostConnectionId
+            let! room = roomStore.Get roomId |> Result.ofOption "Room not found"
 
-            let! offerOpt = hub.Clients.Client(hostConnId).CreateOffer()
+            // Update room
+            let newPlayerId = room.PlayersConnectionId.Length + 1
+            let newPlayersConnId =
+                Array.append
+                    room.PlayersConnectionId
+                    [| newPlayerId, hub.Context.ConnectionId |]
 
-            match offerOpt with
-            | Some offer -> return offer
-            | None -> return! Error "Failed to create offer"
+            let newRoom = { room with PlayersConnectionId = newPlayersConnId }
+
+            do! roomStore.Update' room.RoomId room newRoom
+                |> Result.requireTrue "Failed to update room"
+
+            // Generate offer ids
+            let getOfferIdForPlayer (playerId, connId) =
+                fun _ ->
+                    hub.Clients.Client(connId).CreateOffer(newPlayerId)
+                    |> Task.catch
+                    |> Task.map (function
+                        | Choice1Of2 (Some offerId) -> Ok { PeerId = playerId; OfferId = offerId }
+                        | Choice1Of2 None -> Error $"Failed to create offer for {playerId}"
+                        | Choice2Of2 _ -> Error $"Error occurred when creating offer id")
+
+            let! offerIds =
+                room.PlayersConnectionId
+                |> List.ofArray
+                |> List.map getOfferIdForPlayer
+                |> List.traverseTaskResultM (fun func -> func ())
+                |> TaskResult.map List.toArray
+
+            return { PeerId = newPlayerId; PlayersConnectionInfo = offerIds }
         }

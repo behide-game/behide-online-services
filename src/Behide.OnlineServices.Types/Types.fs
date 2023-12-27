@@ -51,4 +51,10 @@ type RoomId =
 
 type Room =
     { RoomId: RoomId
-      HostConnectionId: string }
+      PlayersConnectionId: (int * string)[] }
+
+type PlayerConnectionInfo = { PeerId: int; OfferId: OfferId }
+type RoomConnectionInfo =
+    { /// The peer id of the joining player
+      PeerId: int
+      PlayersConnectionInfo: PlayerConnectionInfo array }

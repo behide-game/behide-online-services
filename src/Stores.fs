@@ -42,6 +42,8 @@ type IStore<'Id, 'Item> =
     abstract Add: 'Id -> 'Item -> bool
     abstract Get: 'Id -> 'Item option
     abstract Remove: 'Id -> bool
+    abstract Update: 'Id -> 'Item -> bool
+    abstract Update': 'Id -> oldValue: 'Item -> newValue: 'Item -> bool
 
 type Store<'Id, 'Item>() =
     let dict = new ConcurrentDictionary<'Id, 'Item>()
@@ -54,6 +56,16 @@ type Store<'Id, 'Item>() =
             |> function
                 | false, _ -> None
                 | true, (item: 'Item) -> Some item
+
+        member this.Update id newValue =
+            let oldValueOpt = (this :> IStore<'Id, 'Item>).Get(id)
+
+            match oldValueOpt with
+            | None -> false
+            | Some oldValue -> dict.TryUpdate(id, newValue, oldValue)
+
+        member _.Update' id oldValue newValue =
+            dict.TryUpdate(id, newValue, oldValue)
 
 
 
