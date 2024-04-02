@@ -3,7 +3,7 @@
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="./Behide.OnlineServices.Types/Behide.OnlineServices.Types.fsproj" />
+    <ProjectReference Include="../Behide.OnlineServices.Types/Behide.OnlineServices.Types.fsproj" />
     <Compile Include="Helpers.fs" />
     <Compile Include="Stores.fs" />
     <Compile Include="Hubs/Signaling.fs" />

@@ -9,7 +9,23 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/src/bin/Debug/net8.0/Behide.OnlineServices.dll",
+      "program": "${workspaceFolder}/src/Behide.OnlineServices/bin/Debug/net8.0/Behide.OnlineServices.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "externalTerminal",
+      "logging": {
+        "moduleLoad": false,
+        "programOutput": false
+      },
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": ".NET Launch tests",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/Behide.OnlineServices.Tests/bin/Debug/net8.0/Behide.OnlineServices.Tests.dll",
       "args": [],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,

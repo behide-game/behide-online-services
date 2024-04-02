@@ -53,6 +53,9 @@ type Room =
     { RoomId: RoomId
       PlayersConnectionId: (int * string)[] }
 
+/// The connection info of a player
+/// With it's peer id that represent his id in the room
+/// And the offer id to connect to the player
 type PlayerConnectionInfo = { PeerId: int; OfferId: OfferId }
 type RoomConnectionInfo =
     { /// The peer id of the joining player

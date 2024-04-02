@@ -41,6 +41,7 @@ open System.Collections.Concurrent
 type IStore<'Id, 'Item> =
     abstract Add: 'Id -> 'Item -> bool
     abstract Get: 'Id -> 'Item option
+    abstract GetByPredicate: ('Item -> bool) -> ('Id * 'Item) option
     abstract Remove: 'Id -> bool
     abstract Update: 'Id -> 'Item -> bool
     abstract Update': 'Id -> oldValue: 'Item -> newValue: 'Item -> bool
@@ -56,6 +57,11 @@ type Store<'Id, 'Item>() =
             |> function
                 | false, _ -> None
                 | true, (item: 'Item) -> Some item
+
+        member _.GetByPredicate predicate =
+            dict
+            |> Seq.tryFind (_.Value >> predicate)
+            |> Option.map _.Deconstruct()
 
         member this.Update id newValue =
             let oldValueOpt = (this :> IStore<'Id, 'Item>).Get(id)

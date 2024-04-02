@@ -5,7 +5,9 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Behide.OnlineServices.Types", "src\Behide.OnlineServices.Types\Behide.OnlineServices.Types.fsproj", "{3C918AB7-B873-443B-B07B-E8E2E8598669}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Behide.OnlineServices", "src\Behide.OnlineServices.fsproj", "{269838F4-DEB2-4DE9-ACCB-374AED99A957}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Behide.OnlineServices", "src\Behide.OnlineServices\Behide.OnlineServices.fsproj", "{269838F4-DEB2-4DE9-ACCB-374AED99A957}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Behide.OnlineServices.Tests", "src\Behide.OnlineServices.Tests\Behide.OnlineServices.Tests.fsproj", "{D8FE9951-E1CE-46FC-B900-7EEC38E23C27}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -24,5 +26,9 @@ Global
 		{269838F4-DEB2-4DE9-ACCB-374AED99A957}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{269838F4-DEB2-4DE9-ACCB-374AED99A957}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{269838F4-DEB2-4DE9-ACCB-374AED99A957}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D8FE9951-E1CE-46FC-B900-7EEC38E23C27}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D8FE9951-E1CE-46FC-B900-7EEC38E23C27}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D8FE9951-E1CE-46FC-B900-7EEC38E23C27}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D8FE9951-E1CE-46FC-B900-7EEC38E23C27}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
