@@ -21,7 +21,8 @@ type PlayerConnection =
 type P2POffer =
     { Id: OfferId
       InitiatorConnectionId: ConnId
-      SdpDescription: SdpDescription }
+      SdpDescription: SdpDescription
+      Answered: bool }
 
 /// A room
 /// A group of players that are connected to each other
@@ -57,16 +58,18 @@ module Errors =
     type JoinConnectionAttemptError =
         | PlayerConnectionNotFound = 0
         | OfferNotFound = 1
+        | OfferAlreadyAnswered = 2
+        | FailedToUpdateOffer = 3
 
     [<RequireQualifiedAccess>]
-    type SendAnswerError =
+    type SendAnswerError = // To test
         | PlayerConnectionNotFound = 0
         | OfferNotFound = 1
         /// Client is not the answerer. You're trying to answer to your own offer
         | NotAnswerer = 2
 
     [<RequireQualifiedAccess>]
-    type SendIceCandidateError =
+    type SendIceCandidateError = // To test
         | PlayerConnectionNotFound = 0
         | OfferNotFound = 1
 
@@ -84,7 +87,7 @@ module Errors =
         | RoomNotFound = 2
         | FailedToUpdateRoom = 3
         | FailedToUpdatePlayerConnection = 4
-        | FailedToCreateOffer = 5
+        | FailedToCreateOffer = 5 // To test
 
 open Errors
 
@@ -184,7 +187,8 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
             let offer =
                 { Id = OfferId.create ()
                   InitiatorConnectionId = playerConnId
-                  SdpDescription = sdpDescription }
+                  SdpDescription = sdpDescription
+                  Answered = false }
 
             do! offerStore.Add
                     offer.Id
@@ -223,6 +227,12 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 offerId
                 |> offerStore.Get
                 |> Result.ofOption JoinConnectionAttemptError.OfferNotFound
+
+            do! offer.Answered |> Result.requireFalse JoinConnectionAttemptError.OfferAlreadyAnswered
+
+            do! { offer with Answered = true }
+                |> offerStore.Update offerId
+                |> Result.requireTrue JoinConnectionAttemptError.FailedToUpdateOffer
 
             // Add player to group
             do! hub.Groups.AddToGroupAsync(
