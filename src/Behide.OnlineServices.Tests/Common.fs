@@ -38,3 +38,20 @@ let createTestServer () =
 let fakeSdpDescription: SdpDescription =
     { ``type`` = "fake type"
       sdp = "fake sdp" }
+
+let fakeIceCandidate: IceCandidate =
+    { media = "fake media"
+      index = 0
+      name = "fake name" }
+
+type TimedTaskCompletionSource<'A>(timeout: int) =
+    let tcs = new System.Threading.Tasks.TaskCompletionSource<'A>()
+    let cts = new System.Threading.CancellationTokenSource(timeout)
+
+    do
+        cts.Token.Register(fun _ -> tcs.TrySetCanceled() |> ignore)
+        |> ignore
+
+    member this.Task = tcs.Task
+    member this.SetResult(result) = tcs.SetResult(result) |> ignore
+    member this.SetException(ex: exn) = tcs.SetException(ex) |> ignore
