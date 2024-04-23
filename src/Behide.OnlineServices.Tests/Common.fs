@@ -5,9 +5,10 @@ open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 
 open Behide.OnlineServices
+open Behide.OnlineServices.Signaling
 
 let createTestServer () =
-    let offerStore = new Hubs.Signaling.OfferStore()
+    let offerStore = new Hubs.Signaling.ConnAttemptStore()
     let roomStore = new Hubs.Signaling.RoomStore()
     let playerConnsStore = new Hubs.Signaling.PlayerConnsStore()
 
@@ -16,11 +17,11 @@ let createTestServer () =
             .ConfigureServices(fun services ->
                 services |> Program.configureServices
 
-                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IOfferStore, Hubs.Signaling.OfferStore>()) |> ignore
+                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IConnAttemptStore, Hubs.Signaling.ConnAttemptStore>()) |> ignore
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IRoomStore, Hubs.Signaling.RoomStore>()) |> ignore
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerConnsStore, Hubs.Signaling.PlayerConnsStore>()) |> ignore
 
-                services.AddSingleton<Hubs.Signaling.IOfferStore>(offerStore) |> ignore
+                services.AddSingleton<Hubs.Signaling.IConnAttemptStore>(offerStore) |> ignore
                 services.AddSingleton<Hubs.Signaling.IRoomStore>(roomStore) |> ignore
                 services.AddSingleton<Hubs.Signaling.IPlayerConnsStore>(playerConnsStore) |> ignore
             )

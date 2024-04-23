@@ -4,6 +4,6 @@
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Types.fs" />
+    <Compile Include="Signaling.fs" />
   </ItemGroup>
 </Project>

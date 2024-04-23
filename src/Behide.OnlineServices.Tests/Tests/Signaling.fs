@@ -5,14 +5,12 @@ open Microsoft.AspNetCore.SignalR
 open Microsoft.AspNetCore.SignalR.Client
 open Microsoft.AspNetCore.Http.Connections.Client
 open Microsoft.Extensions.DependencyInjection
-open System.Threading
 open System.Threading.Tasks
 
 open Expecto
 open FsToolkit.ErrorHandling
 
-open Behide.OnlineServices
-open Behide.OnlineServices.Hubs.Signaling
+open Behide.OnlineServices.Signaling
 open System.Text.Json.Serialization
 
 
@@ -23,6 +21,7 @@ type SignalingHub(connection: HubConnection) =
         member _.JoinConnectionAttempt  offerId              = connection.InvokeAsync<_>("JoinConnectionAttempt",  offerId)
         member _.SendAnswer             offerId iceCandidate = connection.InvokeAsync<_>("SendAnswer",             offerId, iceCandidate)
         member _.SendIceCandidate       offerId iceCandidate = connection.InvokeAsync<_>("SendIceCandidate",       offerId, iceCandidate)
+        member _.EndConnectionAttempt   offerId              = connection.InvokeAsync<_>("EndConnectionAttempt",   offerId)
 
         member _.CreateRoom   () = connection.InvokeAsync<_>("CreateRoom")
         member _.JoinRoom roomId = connection.InvokeAsync<_>("JoinRoom", roomId)
@@ -109,7 +108,7 @@ let signalingTests =
                 let mutable offerId = None
 
                 // Add handler for creating offer
-                conn1.On<int, OfferId>("CreateOffer", fun _playerId ->
+                conn1.On<int, ConnAttemptId>("CreateOffer", fun _playerId ->
                     Common.fakeSdpDescription
                     |> signalingHub1.StartConnectionAttempt
                     |> Task.map (function
@@ -145,7 +144,7 @@ let signalingTests =
                 Expect.sequenceEqual
                     roomConnectionInfo.PlayersConnectionInfo
                     [ { PeerId = 1
-                        OfferId = offerId |> Flip.Expect.wantSome "An offer id should have been generated" } ]
+                        ConnAttemptId = offerId |> Flip.Expect.wantSome "An offer id should have been generated" } ]
                     "Room connection info should contain the first player connection info and only that"
 
                 // Check if the room contains both players
@@ -287,7 +286,7 @@ let signalingTests =
             testTask "Join nonexisting connection attempt" {
                 let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = OfferId.create()
+                let fakeOfferId = ConnAttemptId.create()
 
                 let! (error: Errors.JoinConnectionAttemptError) =
                     fakeOfferId
@@ -356,9 +355,9 @@ let signalingTests =
                 let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
 
                 // Subscribe to SdpAnswerReceived event
-                let sdpAnswerReceivedTcs = Common.TimedTaskCompletionSource<OfferId * SdpDescription>(1000)
+                let sdpAnswerReceivedTcs = Common.TimedTaskCompletionSource<ConnAttemptId * SdpDescription>(1000)
 
-                conn1.On("SdpAnswerReceived", fun (offerId: OfferId) (sdpDescription: SdpDescription) ->
+                conn1.On("SdpAnswerReceived", fun (offerId: ConnAttemptId) (sdpDescription: SdpDescription) ->
                     sdpAnswerReceivedTcs.SetResult(offerId, sdpDescription)
                 )
                 |> ignore
@@ -381,7 +380,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.isOk "Answer sending should success")
 
                 // Test received answer
-                let! (receivedOfferId: OfferId, receivedSdpDesc: SdpDescription) = sdpAnswerReceivedTcs.Task
+                let! (receivedOfferId: ConnAttemptId, receivedSdpDesc: SdpDescription) = sdpAnswerReceivedTcs.Task
 
                 Expect.equal
                     receivedOfferId
@@ -397,7 +396,7 @@ let signalingTests =
             testTask "Send answer to nonexisting connection attempt" {
                 let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = OfferId.create()
+                let fakeOfferId = ConnAttemptId.create()
 
                 let! (error: Errors.SendAnswerError) =
                     signalingHub.SendAnswer
@@ -470,9 +469,9 @@ let signalingTests =
                 let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
 
                 // Subscribe to IceCandidateReceived event
-                let iceCandidateReceivedTcs = Common.TimedTaskCompletionSource<OfferId * IceCandidate>(1000)
+                let iceCandidateReceivedTcs = Common.TimedTaskCompletionSource<ConnAttemptId * IceCandidate>(1000)
 
-                conn1.On("IceCandidateReceived", fun (offerId: OfferId) (iceCandidate: IceCandidate) ->
+                conn1.On("IceCandidateReceived", fun (offerId: ConnAttemptId) (iceCandidate: IceCandidate) ->
                     iceCandidateReceivedTcs.SetResult(offerId, iceCandidate)
                 )
                 |> ignore
@@ -495,7 +494,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.isOk "Ice candidate sending should success")
 
                 // Test received ice candidate
-                let! (receivedOfferId: OfferId, receivedIceCandidate: IceCandidate) = iceCandidateReceivedTcs.Task
+                let! (receivedOfferId: ConnAttemptId, receivedIceCandidate: IceCandidate) = iceCandidateReceivedTcs.Task
 
                 Expect.equal
                     receivedOfferId
@@ -511,7 +510,7 @@ let signalingTests =
             testTask "Send ice candidate to nonexisting connection attempt" {
                 let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = OfferId.create()
+                let fakeOfferId = ConnAttemptId.create()
 
                 let! (error: Errors.SendIceCandidateError) =
                     signalingHub.SendIceCandidate
@@ -573,7 +572,7 @@ let signalingTests =
 
                 Expect.equal
                     error
-                    Errors.SendIceCandidateError.NotAnswerer
+                    Errors.SendIceCandidateError.NotParticipant
                     "Sending ice candidate connection attempt should fail"
             }
 

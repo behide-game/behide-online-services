@@ -20,7 +20,7 @@ let configureServices (services: IServiceCollection) =
                 .AddToJsonSerializerOptions(options.PayloadSerializerOptions)
         )
     |> ignore
-    services.AddSingleton<Signaling.IOfferStore, Signaling.OfferStore>() |> ignore
+    services.AddSingleton<Signaling.IConnAttemptStore, Signaling.ConnAttemptStore>() |> ignore
     services.AddSingleton<Signaling.IRoomStore, Signaling.RoomStore>() |> ignore
     services.AddSingleton<Signaling.IPlayerConnsStore, Signaling.PlayerConnsStore>() |> ignore
 

@@ -5,103 +5,22 @@ open Behide.OnlineServices
 open Microsoft.AspNetCore.SignalR
 open FsToolkit.ErrorHandling
 
+open Behide.OnlineServices.Signaling
+open Behide.OnlineServices.Signaling.Errors
 
-type ConnId =
-    private | ConnId of string
-    static member parse connId = ConnId connId
-    static member raw (ConnId connId) = connId
-
-/// Player state in the signaling process
-type PlayerConnection =
-    { ConnectionId: ConnId
-      OfferIds: OfferId list
-      Room: RoomId option }
-
-/// A P2P offer
-type P2POffer =
-    { Id: OfferId
-      InitiatorConnectionId: ConnId
-      SdpDescription: SdpDescription
-      Answerer: ConnId option }
-
-/// A room
-/// A group of players that are connected to each other
-type Room =
-    { Id: RoomId
-      Initiator: ConnId
-      Players: (int * ConnId) list }
 
 
 type IPlayerConnsStore = Store.IStore<ConnId, PlayerConnection>
 type PlayerConnsStore = Store.Store<ConnId, PlayerConnection>
 
-type IOfferStore = Store.IStore<OfferId, P2POffer>
-type OfferStore = Store.Store<OfferId, P2POffer>
+type IConnAttemptStore = Store.IStore<ConnAttemptId, ConnAttempt>
+type ConnAttemptStore = Store.Store<ConnAttemptId, ConnAttempt>
 
 type IRoomStore = Store.IStore<RoomId, Room>
 type RoomStore = Store.Store<RoomId, Room>
 
 
-type ISignalingClient =
-    abstract member CreateOffer : int -> Task<OfferId option>
-    abstract member SdpAnswerReceived: OfferId -> SdpDescription -> Task
-    abstract member IceCandidateReceived: OfferId -> IceCandidate -> Task
-
-module Errors =
-    [<RequireQualifiedAccess>]
-    type StartConnectionAttemptError =
-        | PlayerConnectionNotFound = 0
-        | FailedToCreateOffer = 1
-        | FailedToUpdatePlayerConnection = 2
-
-    [<RequireQualifiedAccess>]
-    type JoinConnectionAttemptError =
-        | PlayerConnectionNotFound = 0
-        | OfferNotFound = 1
-        | OfferAlreadyAnswered = 2
-        | InitiatorCannotJoin = 3
-        | FailedToUpdateOffer = 4
-
-    [<RequireQualifiedAccess>]
-    type SendAnswerError =
-        | PlayerConnectionNotFound = 0
-        | OfferNotFound = 1
-        | NotAnswerer = 2
-
-    [<RequireQualifiedAccess>]
-    type SendIceCandidateError =
-        | PlayerConnectionNotFound = 0
-        | OfferNotFound = 1
-        | NotAnswerer = 2
-
-    [<RequireQualifiedAccess>]
-    type CreateRoomError =
-        | PlayerConnectionNotFound = 0
-        | PlayerAlreadyInARoom = 1
-        | FailedToRegisterRoom = 2
-        | FailedToUpdatePlayerConnection = 3
-
-    [<RequireQualifiedAccess>]
-    type JoinRoomError =
-        | PlayerConnectionNotFound = 0
-        | PlayerAlreadyInARoom = 1
-        | RoomNotFound = 2
-        | FailedToUpdateRoom = 3
-        | FailedToUpdatePlayerConnection = 4
-        | FailedToCreateOffer = 5
-
-open Errors
-
-type ISignalingHub =
-    abstract member StartConnectionAttempt : SdpDescription -> TaskResult<OfferId, StartConnectionAttemptError>
-    abstract member JoinConnectionAttempt : OfferId -> TaskResult<SdpDescription, JoinConnectionAttemptError>
-    abstract member SendAnswer : OfferId -> SdpDescription -> TaskResult<unit, SendAnswerError>
-    abstract member SendIceCandidate : OfferId -> IceCandidate -> TaskResult<unit, SendIceCandidateError>
-
-    abstract member CreateRoom : unit -> TaskResult<RoomId, CreateRoomError>
-    abstract member JoinRoom : RoomId -> TaskResult<RoomConnectionInfo, JoinRoomError>
-
-type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsStore: IPlayerConnsStore) =
+type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, playerConnsStore: IPlayerConnsStore) =
     inherit Hub<ISignalingClient>()
     // Should interface ISignalingHub, but it make the methods not callable from the client
 
@@ -112,7 +31,7 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
 
             let playerConn =
                 { ConnectionId = playerConnId
-                  OfferIds = []
+                  ConnAttemptIds = []
                   Room = None }
 
             do! playerConnsStore.Add
@@ -151,18 +70,18 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 do! roomStore.Update' roomId room newRoom
                     |> Result.requireTrue "Failed to update room"
 
-            // Remove offers
-            let removeOfferErrors =
-                playerConn.OfferIds
-                |> List.choose (fun offerId ->
-                    offerId
-                    |> offerStore.Remove
+            // Remove connection attempts
+            let removeConnAttemptErrors =
+                playerConn.ConnAttemptIds
+                |> List.choose (fun connAttemptId ->
+                    connAttemptId
+                    |> connAttemptStore.Remove
                     |> function
                         | true -> None
-                        | false -> Some $"Failed to remove offer: {offerId}"
+                        | false -> Some $"Failed to remove connection attempt: {connAttemptId}"
                 )
 
-            match removeOfferErrors with
+            match removeConnAttemptErrors with
             | [] -> ()
             | errors -> return! errors |> String.concat "\n" |> Error
 
@@ -184,21 +103,21 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 |> playerConnsStore.Get
                 |> Result.ofOption StartConnectionAttemptError.PlayerConnectionNotFound
 
-            // Create offer
-            let offer =
-                { Id = OfferId.create ()
+            // Create connection attempt
+            let connAttempt =
+                { Id = ConnAttemptId.create ()
                   InitiatorConnectionId = playerConnId
                   SdpDescription = sdpDescription
                   Answerer = None }
 
-            do! offerStore.Add
-                    offer.Id
-                    offer
+            do! connAttemptStore.Add
+                    connAttempt.Id
+                    connAttempt
                 |> Result.requireTrue StartConnectionAttemptError.FailedToCreateOffer
 
             // Update player connection
             let newPlayerConn =
-                { playerConn with OfferIds = offer.Id :: playerConn.OfferIds }
+                { playerConn with ConnAttemptIds = connAttempt.Id :: playerConn.ConnAttemptIds }
 
             do! playerConnsStore.Update'
                     playerConnId
@@ -206,10 +125,10 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                     newPlayerConn
                 |> Result.requireTrue StartConnectionAttemptError.FailedToUpdatePlayerConnection
 
-            return offer.Id
+            return connAttempt.Id
         }
 
-    member hub.JoinConnectionAttempt (offerId: OfferId) =
+    member hub.JoinConnectionAttempt (connAttemptId: ConnAttemptId) =
         taskResult {
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
@@ -219,29 +138,29 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 |> playerConnsStore.Get
                 |> Result.ofOption JoinConnectionAttemptError.PlayerConnectionNotFound
 
-            // Retrieve offer
-            let! offer =
-                offerId
-                |> offerStore.Get
+            // Retrieve connection attempt
+            let! connAttempt =
+                connAttemptId
+                |> connAttemptStore.Get
                 |> Result.ofOption JoinConnectionAttemptError.OfferNotFound
 
-            // Check if offer has not been answered
-            do! offer.Answerer
+            // Check if connection attempt has not been answered
+            do! connAttempt.Answerer
                 |> Result.requireNone JoinConnectionAttemptError.OfferAlreadyAnswered
 
             // Check if the answerer is not the initiator
-            do! offer.InitiatorConnectionId <> connId
+            do! connAttempt.InitiatorConnectionId <> connId
                 |> Result.requireTrue JoinConnectionAttemptError.InitiatorCannotJoin
 
-            // Update offer
-            do! { offer with Answerer = Some connId }
-                |> offerStore.Update offerId
+            // Update connection attempt
+            do! { connAttempt with Answerer = Some connId }
+                |> connAttemptStore.Update connAttemptId
                 |> Result.requireTrue JoinConnectionAttemptError.FailedToUpdateOffer
 
-            return offer.SdpDescription
+            return connAttempt.SdpDescription
         }
 
-    member hub.SendAnswer (offerId: OfferId) (sdpDescription: SdpDescription) =
+    member hub.SendAnswer (connAttemptId: ConnAttemptId) (sdpDescription: SdpDescription) =
         taskResult {
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
@@ -250,15 +169,15 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 |> playerConnsStore.Get
                 |> Result.ofOption SendAnswerError.PlayerConnectionNotFound
 
-            // Retrieve offer
-            let! offer =
-                offerId
-                |> offerStore.Get
+            // Retrieve connection attempt
+            let! connAttempt =
+                connAttemptId
+                |> connAttemptStore.Get
                 |> Result.ofOption SendAnswerError.OfferNotFound
 
             // Get answerer
             let! answerer =
-                offer.Answerer
+                connAttempt.Answerer
                 |> Result.ofOption SendAnswerError.NotAnswerer
 
             // Check if the client is the answerer
@@ -266,10 +185,10 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 |> Result.requireTrue SendAnswerError.NotAnswerer
 
             // Send answer to initiator
-            do! hub.Clients.Client(offer.InitiatorConnectionId |> ConnId.raw).SdpAnswerReceived offerId sdpDescription
+            do! hub.Clients.Client(connAttempt.InitiatorConnectionId |> ConnId.raw).SdpAnswerReceived connAttemptId sdpDescription
         }
 
-    member hub.SendIceCandidate (offerId: OfferId) (iceCandidate: IceCandidate) =
+    member hub.SendIceCandidate (connAttemptId: ConnAttemptId) (iceCandidate: IceCandidate) =
         taskResult {
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
@@ -279,27 +198,55 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
                 |> playerConnsStore.Get
                 |> Result.ofOption SendIceCandidateError.PlayerConnectionNotFound
 
-            let! offer =
-                offerId
-                |> offerStore.Get
+            let! connAttempt =
+                connAttemptId
+                |> connAttemptStore.Get
                 |> Result.ofOption SendIceCandidateError.OfferNotFound
 
             let! answerer =
-                offer.Answerer
+                connAttempt.Answerer
                 |> Result.ofOption SendIceCandidateError.NotAnswerer
 
             // Check if the client is in the connection attempt
-            do! (connId = offer.InitiatorConnectionId || connId = answerer)
-                |> Result.requireTrue SendIceCandidateError.NotAnswerer
+            do! (connId = connAttempt.InitiatorConnectionId || connId = answerer)
+                |> Result.requireTrue SendIceCandidateError.NotParticipant
 
             // Determine the target connection id
             let targetConnId =
                 match connId = answerer with
-                | true -> offer.InitiatorConnectionId
+                | true -> connAttempt.InitiatorConnectionId
                 | false -> answerer
 
             // Send ice candidate to other peer
-            do! hub.Clients.Client(targetConnId |> ConnId.raw).IceCandidateReceived offerId iceCandidate
+            do! hub.Clients.Client(targetConnId |> ConnId.raw).IceCandidateReceived connAttemptId iceCandidate
+        }
+
+    member hub.EndConnectionAttempt (connAttemptId: ConnAttemptId) =
+        taskResult {
+            let connId = hub.Context.ConnectionId |> ConnId.parse
+
+            // Check if client has a player connection
+            let! _playerConn =
+                connId
+                |> playerConnsStore.Get
+                |> Result.ofOption EndConnectionAttemptError.PlayerConnectionNotFound
+
+            let! connAttempt =
+                connAttemptId
+                |> connAttemptStore.Get
+                |> Result.ofOption EndConnectionAttemptError.OfferNotFound
+
+            let! answerer =
+                connAttempt.Answerer
+                |> Result.ofOption EndConnectionAttemptError.AnswererNotFound
+
+            // Check if the client is in the connection attempt
+            do! (connId = connAttempt.InitiatorConnectionId || connId = answerer)
+                |> Result.requireTrue EndConnectionAttemptError.NotParticipant
+
+            // Remove connection attempt
+            do! connAttemptStore.Remove connAttemptId
+                |> Result.requireTrue EndConnectionAttemptError.FailedToRemoveOffer
         }
 
     // --- Rooms ---
@@ -347,7 +294,7 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
             return room.Id
         }
 
-    /// Contains a bug: Can add player to the room and fail to create offers (should create offers in another method)
+    /// Contains a bug: Can add player to the room and fail to create connection attempts (should create connection attempts in another method)
     member hub.JoinRoom (roomId: RoomId) =
         taskResult {
             let playerConnId = hub.Context.ConnectionId |> ConnId.parse
@@ -394,20 +341,20 @@ type SignalingHub(offerStore: IOfferStore, roomStore: IRoomStore, playerConnsSto
             )
 
             // --- Connect new player to all others
-            let getOfferIdForPlayer (playerId, connId) =
+            let getConnAttemptIdForPlayer (playerId, connId) =
                 fun _ ->
                     hub.Clients.Client(connId |> ConnId.raw).CreateOffer(newPlayerId)
                     |> Task.catch
                     |> Task.map (function
-                        | Choice1Of2 (Some offerId) -> Ok { PeerId = playerId; OfferId = offerId }
+                        | Choice1Of2 (Some connAttemptId) -> Ok { PeerId = playerId; ConnAttemptId = connAttemptId }
                         | Choice1Of2 None -> Error JoinRoomError.FailedToCreateOffer
                         | Choice2Of2 _ -> Error JoinRoomError.FailedToCreateOffer)
 
-            let! offerIds =
+            let! playersConnectionInfo =
                 room.Players
-                |> List.map getOfferIdForPlayer
+                |> List.map getConnAttemptIdForPlayer
                 |> List.traverseTaskResultM (fun func -> func ())
                 |> TaskResult.map List.toArray
 
-            return { PeerId = newPlayerId; PlayersConnectionInfo = offerIds }
+            return { PeerId = newPlayerId; PlayersConnectionInfo = playersConnectionInfo }
         }
