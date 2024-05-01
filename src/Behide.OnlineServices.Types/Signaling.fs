@@ -178,6 +178,6 @@ type ISignalingHub =
     abstract member LeaveRoom : unit -> Task<Result<unit, LeaveRoomError>>
 
 type ISignalingClient =
-    abstract member CreateOffer : answererPeerId: int -> Task<ConnAttemptId option>
+    abstract member CreateConnAttempt : answererPeerId: int -> Task<ConnAttemptId option>
     abstract member SdpAnswerReceived: ConnAttemptId -> SdpDescription -> Task
     abstract member IceCandidateReceived: ConnAttemptId -> IceCandidate -> Task
