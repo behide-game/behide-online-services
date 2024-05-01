@@ -6,3 +6,8 @@ module Result =
         match opt with
         | Some value -> Ok value
         | None -> Error error
+
+let (|Equals|_|) valueToMatch value =
+    match value = valueToMatch with
+    | true -> Some ()
+    | false -> None

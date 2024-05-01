@@ -56,34 +56,37 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             match playerConn.Room with
             | None -> ()
             | Some roomId ->
-                let! room =
-                    roomId
-                    |> roomStore.Get
-                    |> Result.ofOption "Room not found"
+                do! lock roomStore (fun _ -> taskResult {
+                    let! room =
+                        roomId
+                        |> roomStore.Get
+                        |> Result.ofOption "Room not found"
 
-                let newPlayersConnId =
-                    room.Players
-                    |> List.filter (fun (_playerId, connId) -> connId <> playerConnId)
+                    let newPlayersConnId =
+                        room.Players
+                        |> List.filter (fun (_playerId, connId) -> connId <> playerConnId)
 
-                let newRoom = { room with Players = newPlayersConnId }
+                    let newRoom = { room with Players = newPlayersConnId }
 
-                do! roomStore.Update' roomId room newRoom
-                    |> Result.requireTrue "Failed to update room"
+                    do! roomStore.Update roomId room newRoom
+                        |> Result.requireTrue "Failed to update room"
+                })
 
             // Remove connection attempts
-            let removeConnAttemptErrors =
-                playerConn.ConnAttemptIds
+            do! playerConn.ConnAttemptIds
                 |> List.choose (fun connAttemptId ->
                     connAttemptId
                     |> connAttemptStore.Remove
                     |> function
                         | true -> None
-                        | false -> Some $"Failed to remove connection attempt: {connAttemptId}"
+                        | false -> Some connAttemptId
                 )
-
-            match removeConnAttemptErrors with
-            | [] -> ()
-            | errors -> return! errors |> String.concat "\n" |> Error
+                |> function
+                    | [] -> Ok ()
+                    | failedConnAttempts ->
+                        failedConnAttempts
+                        |> sprintf "Failed to remove connection attempts: %A"
+                        |> Error
 
             // Remove player connection
             do! playerConnsStore.Remove playerConnId
@@ -113,13 +116,13 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             do! connAttemptStore.Add
                     connAttempt.Id
                     connAttempt
-                |> Result.requireTrue StartConnectionAttemptError.FailedToCreateOffer
+                |> Result.requireTrue StartConnectionAttemptError.FailedToCreateConnAttempt
 
             // Update player connection
             let newPlayerConn =
                 { playerConn with ConnAttemptIds = connAttempt.Id :: playerConn.ConnAttemptIds }
 
-            do! playerConnsStore.Update'
+            do! playerConnsStore.Update
                     playerConnId
                     playerConn
                     newPlayerConn
@@ -153,8 +156,10 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 |> Result.requireTrue JoinConnectionAttemptError.InitiatorCannotJoin
 
             // Update connection attempt
-            do! { connAttempt with Answerer = Some connId }
-                |> connAttemptStore.Update connAttemptId
+            do! connAttemptStore.Update
+                    connAttemptId
+                    connAttempt
+                    { connAttempt with Answerer = Some connId }
                 |> Result.requireTrue JoinConnectionAttemptError.FailedToUpdateOffer
 
             return connAttempt.SdpDescription
@@ -268,7 +273,8 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let room =
                 { Id = RoomId.create ()
                   Initiator = playerConnId
-                  Players = [ 1, playerConnId ] } // Host peer id should always be 1
+                  Players = [ 1, playerConnId ] // Host peer id should always be 1
+                  Connections = [] }
 
             do! roomStore.Add
                     room.Id
@@ -279,22 +285,15 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let newPlayerConn =
                 { playerConn with Room = Some room.Id }
 
-            do! playerConnsStore.Update'
+            do! playerConnsStore.Update
                     playerConnId
                     playerConn
                     newPlayerConn
                 |> Result.requireTrue CreateRoomError.FailedToUpdatePlayerConnection
 
-            // Add player to group
-            do! hub.Groups.AddToGroupAsync(
-                hub.Context.ConnectionId,
-                room.Id |> RoomId.raw
-            )
-
             return room.Id
         }
 
-    /// Contains a bug: Can add player to the room and fail to create connection attempts (should create connection attempts in another method)
     member hub.JoinRoom (roomId: RoomId) =
         taskResult {
             let playerConnId = hub.Context.ConnectionId |> ConnId.parse
@@ -308,53 +307,146 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             do! playerConn.Room
                 |> Result.requireNone JoinRoomError.PlayerAlreadyInARoom
 
-            let! room =
-                roomId
-                |> roomStore.Get
-                |> Result.ofOption JoinRoomError.RoomNotFound
-
-            // Update room
-            let newPlayerId = (room.Players |> List.length) + 1
-            let newRoom =
-                { room with Players = (newPlayerId, playerConnId) :: room.Players }
-
-            do! roomStore.Update'
+            let! newPlayerId = lock roomStore (fun _ -> taskResult {
+                let! room =
                     roomId
-                    room
-                    newRoom
-                |> Result.requireTrue JoinRoomError.FailedToUpdateRoom
+                    |> roomStore.Get
+                    |> Result.ofOption JoinRoomError.RoomNotFound
+
+                // Update room
+                let newPlayerId = (room.Players |> List.length) + 1
+                let newRoom =
+                    { room with Players = (newPlayerId, playerConnId) :: room.Players }
+
+                do! roomStore.Update
+                        roomId
+                        room
+                        newRoom
+                    |> Result.requireTrue JoinRoomError.FailedToUpdateRoom
+
+                return newPlayerId
+            })
 
             // Update player connection
             let newPlayerConn =
                 { playerConn with Room = Some roomId }
 
-            do! playerConnsStore.Update'
+            do! playerConnsStore.Update
                     playerConnId
                     playerConn
                     newPlayerConn
                 |> Result.requireTrue JoinRoomError.FailedToUpdatePlayerConnection
 
-            // Add player to group
-            do! hub.Groups.AddToGroupAsync(
-                hub.Context.ConnectionId,
-                roomId |> RoomId.raw
+            return newPlayerId
+        }
+
+    member hub.ConnectToRoomPlayers() =
+        taskResult {
+            let playerConnId = hub.Context.ConnectionId |> ConnId.parse
+
+            let! playerConn =
+                playerConnId
+                |> playerConnsStore.Get
+                |> Result.ofOption ConnectToRoomPlayersError.PlayerConnectionNotFound
+
+            let! room =
+                playerConn.Room
+                |> Option.bind roomStore.Get
+                |> Result.ofOption ConnectToRoomPlayersError.NotInARoom
+
+            let! requestingPlayerId =
+                room.Players
+                |> List.tryFind (snd >> (=) playerConn.ConnectionId)
+                |> Result.ofOption ConnectToRoomPlayersError.PlayerNotInRoomPlayers
+                |> Result.map fst
+
+
+            /// Create connection attempt on the requested client and return the ConnAttemptId with a "connection" to add in the room
+            let createConnAttemptForPlayer (peerId, connId) =
+                task {
+                    try
+                        let! r = hub.Clients.Client(connId |> ConnId.raw).CreateOffer(requestingPlayerId)
+
+                        match r with
+                        | None -> return Error peerId
+                        | Some connAttemptId ->
+                            let connInfo = { PeerId = peerId; ConnAttemptId = connAttemptId }
+                            let connection = playerConnId, connId
+
+                            return Ok (connInfo, connection)
+
+                    with // Handle the case where the client didn't registered an handler
+                    | _ -> return Error peerId
+                }
+
+            let alreadyConnectedPlayers =
+                room.Connections
+                |> List.choose (fun (p1, p2) ->
+                    match playerConnId with
+                    | Equals p1 -> Some p2
+                    | Equals p2 -> Some p1
+                    | _ -> None
+                )
+
+            let! playersConnectionInfoResults =
+                room.Players
+                |> List.filter (fun (_, connId) ->
+                    connId <> playerConnId // Don't connect the player to himself
+                    && alreadyConnectedPlayers |> List.contains connId |> not // Don't reconnect player
+                )
+                |> List.map createConnAttemptForPlayer
+                |> Task.WhenAll
+
+            let mutable playersConnInfo = []
+            let mutable newConnections = []
+            let mutable failed = []
+
+            playersConnectionInfoResults |> Array.iter (
+                function
+                | Ok (connInfo, connection) ->
+                    playersConnInfo <- connInfo :: playersConnInfo
+                    newConnections <- connection :: newConnections
+                | Error peerId ->
+                    failed <- peerId :: failed
             )
 
-            // --- Connect new player to all others
-            let getConnAttemptIdForPlayer (playerId, connId) =
-                fun _ ->
-                    hub.Clients.Client(connId |> ConnId.raw).CreateOffer(newPlayerId)
-                    |> Task.catch
-                    |> Task.map (function
-                        | Choice1Of2 (Some connAttemptId) -> Ok { PeerId = playerId; ConnAttemptId = connAttemptId }
-                        | Choice1Of2 None -> Error JoinRoomError.FailedToCreateOffer
-                        | Choice2Of2 _ -> Error JoinRoomError.FailedToCreateOffer)
+            // Update room
+            do! roomStore.Update
+                    room.Id
+                    room
+                    { room with Connections = newConnections @ room.Connections }
+                |> Result.requireTrue ConnectToRoomPlayersError.FailedToUpdateRoom
 
-            let! playersConnectionInfo =
-                room.Players
-                |> List.map getConnAttemptIdForPlayer
-                |> List.traverseTaskResultM (fun func -> func ())
-                |> TaskResult.map List.toArray
+            return { PlayersConnInfo = playersConnInfo |> List.toArray
+                     FailedCreations = failed |> List.toArray }
+        }
 
-            return { PeerId = newPlayerId; PlayersConnectionInfo = playersConnectionInfo }
+    member hub.LeaveRoom() =
+        taskResult {
+            let playerConnId = hub.Context.ConnectionId |> ConnId.parse
+
+            // Check if a player connection exists
+            let! playerConn =
+                playerConnId
+                |> playerConnsStore.Get
+                |> Result.ofOption LeaveRoomError.PlayerConnectionNotFound
+
+            // Get player's room
+            let! room =
+                playerConn.Room
+                |> Option.bind roomStore.Get
+                |> Result.ofOption LeaveRoomError.NotInARoom
+
+            // Remove player from room
+            let newRoom = { room with Players = room.Players |> List.filter (snd >> (<>) playerConnId) }
+
+            do! roomStore.Update room.Id room newRoom
+                |> Result.requireTrue LeaveRoomError.FailedToUpdateRoom
+
+            // Update player connection
+            do! playerConnsStore.Update
+                    playerConnId
+                    playerConn
+                    { playerConn with Room = None }
+                    |> Result.requireTrue LeaveRoomError.FailedToUpdatePlayerConnection
         }

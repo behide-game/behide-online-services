@@ -8,8 +8,7 @@ type IStore<'Id, 'Item> =
     abstract Get: 'Id -> 'Item option
     abstract GetByPredicate: ('Item -> bool) -> ('Id * 'Item) option
     abstract Remove: 'Id -> bool
-    abstract Update: 'Id -> 'Item -> bool
-    abstract Update': 'Id -> oldValue: 'Item -> newValue: 'Item -> bool
+    abstract Update: 'Id -> oldValue: 'Item -> newValue: 'Item -> bool
 
 type Store<'Id, 'Item>() =
     let dict = new ConcurrentDictionary<'Id, 'Item>()
@@ -24,12 +23,6 @@ type Store<'Id, 'Item>() =
             |> Seq.tryFind (_.Value >> predicate)
             |> Option.map _.Deconstruct()
 
-        member this.Update id newValue =
-            let oldValueOpt = (this :> IStore<'Id, 'Item>).Get(id)
-
-            match oldValueOpt with
-            | None -> false
-            | Some oldValue -> dict.TryUpdate(id, newValue, oldValue)
-
-        member _.Update' id oldValue newValue =
+        /// Don't forget to use "lock"
+        member _.Update id oldValue newValue =
             dict.TryUpdate(id, newValue, oldValue)

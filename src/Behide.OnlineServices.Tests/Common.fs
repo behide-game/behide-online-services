@@ -53,6 +53,6 @@ type TimedTaskCompletionSource<'A>(timeout: int) =
         cts.Token.Register(fun _ -> tcs.TrySetCanceled() |> ignore)
         |> ignore
 
-    member this.Task = tcs.Task
-    member this.SetResult(result) = tcs.SetResult(result) |> ignore
-    member this.SetException(ex: exn) = tcs.SetException(ex) |> ignore
+    member _.Task = tcs.Task
+    member _.SetResult(result) = tcs.SetResult(result) |> ignore
+    member _.SetException(ex: exn) = tcs.SetException(ex) |> ignore

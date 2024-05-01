@@ -70,7 +70,10 @@ type RoomId =
 type Room =
     { Id: RoomId
       Initiator: ConnId
-      Players: (int * ConnId) list }
+      /// Contains the initiator
+      Players: (int * ConnId) list
+      /// A list of the connections between the peers
+      Connections: (ConnId * ConnId) list }
 
 
 
@@ -88,16 +91,15 @@ type PlayerConnection =
 /// Used when a player join a room and need to connect to the other players
 type PlayerConnectionInfo = { PeerId: int; ConnAttemptId: ConnAttemptId }
 type RoomConnectionInfo =
-    { /// The peer id of the joining player
-      PeerId: int
-      PlayersConnectionInfo: PlayerConnectionInfo array }
+    { PlayersConnInfo: PlayerConnectionInfo array
+      FailedCreations: int array }
 
 
 module Errors =
     [<RequireQualifiedAccess>]
     type StartConnectionAttemptError =
         | PlayerConnectionNotFound = 0
-        | FailedToCreateOffer = 1
+        | FailedToCreateConnAttempt = 1
         | FailedToUpdatePlayerConnection = 2
 
     [<RequireQualifiedAccess>]
@@ -143,7 +145,20 @@ module Errors =
         | RoomNotFound = 2
         | FailedToUpdateRoom = 3
         | FailedToUpdatePlayerConnection = 4
-        | FailedToCreateOffer = 5
+
+    [<RequireQualifiedAccess>]
+    type ConnectToRoomPlayersError =
+        | PlayerConnectionNotFound = 0
+        | NotInARoom = 1
+        | PlayerNotInRoomPlayers = 2
+        | FailedToUpdateRoom = 3
+
+    [<RequireQualifiedAccess>]
+    type LeaveRoomError =
+        | PlayerConnectionNotFound = 0
+        | NotInARoom = 1
+        | FailedToUpdateRoom = 2
+        | FailedToUpdatePlayerConnection = 3
 
 open Errors
 
@@ -157,9 +172,12 @@ type ISignalingHub =
     abstract member EndConnectionAttempt : ConnAttemptId -> Task<Result<unit, EndConnectionAttemptError>>
 
     abstract member CreateRoom : unit -> Task<Result<RoomId, CreateRoomError>>
-    abstract member JoinRoom : RoomId -> Task<Result<RoomConnectionInfo, JoinRoomError>>
+    /// Return the peerId of the player in the room
+    abstract member JoinRoom : RoomId -> Task<Result<int, JoinRoomError>>
+    abstract member ConnectToRoomPlayers : unit -> Task<Result<RoomConnectionInfo, ConnectToRoomPlayersError>>
+    abstract member LeaveRoom : unit -> Task<Result<unit, LeaveRoomError>>
 
 type ISignalingClient =
-    abstract member CreateOffer : int -> Task<ConnAttemptId option>
+    abstract member CreateOffer : answererPeerId: int -> Task<ConnAttemptId option>
     abstract member SdpAnswerReceived: ConnAttemptId -> SdpDescription -> Task
     abstract member IceCandidateReceived: ConnAttemptId -> IceCandidate -> Task

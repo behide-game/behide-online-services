@@ -5,6 +5,7 @@ open Microsoft.AspNetCore.SignalR
 open Microsoft.AspNetCore.SignalR.Client
 open Microsoft.AspNetCore.Http.Connections.Client
 open Microsoft.Extensions.DependencyInjection
+open System.Threading
 open System.Threading.Tasks
 
 open Expecto
@@ -25,6 +26,8 @@ type SignalingHub(connection: HubConnection) =
 
         member _.CreateRoom   () = connection.InvokeAsync<_>("CreateRoom")
         member _.JoinRoom roomId = connection.InvokeAsync<_>("JoinRoom", roomId)
+        member _.LeaveRoom    () = connection.InvokeAsync<_>("LeaveRoom")
+        member _.ConnectToRoomPlayers() = connection.InvokeAsync<_>("ConnectToRoomPlayers")
 
 
 let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
@@ -34,7 +37,7 @@ let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
     let setupJsonProtocol (options: JsonHubProtocolOptions) =
         JsonFSharpOptions
             .Default()
-            .AddToJsonSerializerOptions(options.PayloadSerializerOptions);
+            .AddToJsonSerializerOptions(options.PayloadSerializerOptions)
 
     let url = testServer.BaseAddress.ToString() + "webrtc-signaling"
 
@@ -128,7 +131,7 @@ let signalingTests =
 
 
                 // Join the room
-                let! (roomConnectionInfo: RoomConnectionInfo) =
+                let! playerId =
                     signalingHub2.JoinRoom roomId
                     |> Task.map (Flip.Expect.wantOk "Room joining should success")
 
@@ -139,13 +142,7 @@ let signalingTests =
 
 
                 // Check if the room connection info is correct
-                Expect.equal roomConnectionInfo.PeerId 2 "Peer ID should be 2 in that case"
-
-                Expect.sequenceEqual
-                    roomConnectionInfo.PlayersConnectionInfo
-                    [ { PeerId = 1
-                        ConnAttemptId = offerId |> Flip.Expect.wantSome "An offer id should have been generated" } ]
-                    "Room connection info should contain the first player connection info and only that"
+                Expect.equal playerId 2 "Peer ID should be 2 in that case"
 
                 // Check if the room contains both players
                 Expect.equal
@@ -193,8 +190,127 @@ let signalingTests =
                     Errors.JoinRoomError.RoomNotFound
                     "Nonexisting room joining should fail"
             }
+        ]
 
-            testTask "Join room without add handler for CreateOffer" {
+        testList "ConnectToRoomPlayers" [
+            testTask "Connect to room players" {
+                // Create room
+                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
+
+                let! roomId =
+                    signalingHub1.CreateRoom()
+                    |> Task.map (Flip.Expect.wantOk "Failed to create a room")
+
+                // Join room
+                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+
+                let! secondPlayerId =
+                    signalingHub2.JoinRoom roomId
+                    |> Task.map (Flip.Expect.wantOk "Failed to join room")
+
+                Expect.equal secondPlayerId 2 "The second player should have a playerId/peerId to 2"
+
+                // Register "CreateOffer" handler on first player
+                let mutable connAttemptId = None
+
+                conn1.On<int, ConnAttemptId>("CreateOffer", fun _playerId ->
+                    Common.fakeSdpDescription
+                    |> signalingHub1.StartConnectionAttempt
+                    |> Task.map (function
+                        | Ok c -> connAttemptId <- Some c; c
+                        | Error e -> failwithf "Failed to create connection attempt: %A" e)
+                )
+                |> ignore
+
+                // Connect players
+                let! (res: RoomConnectionInfo) =
+                    signalingHub2.ConnectToRoomPlayers()
+                    |> Task.map (Flip.Expect.wantOk "Failed to create connection information for players")
+
+                Expect.isEmpty res.FailedCreations "No connection attempt creation should be failed"
+
+                let connAttemptId = Expect.wantSome connAttemptId "An connection attempt id should have been generated"
+                Expect.sequenceEqual
+                    (res.PlayersConnInfo |> List.ofArray)
+                    [ { PeerId = 1; ConnAttemptId = connAttemptId } ]
+                    "Players connection info should contain the first player connection info and only that"
+            }
+
+            testTheoryTask
+                "Connect to room players with multiple players"
+                [ 3, 0
+                  10, 4
+                  100, 99 ]
+                <| fun (nbOfPeers: int, peerThatConnects: int) -> task {
+                    let! players =
+                        List.init nbOfPeers (fun _ -> testServer |> connectHub)
+                        |> Task.WhenAll
+                        |> Task.map List.ofArray
+
+                    // Register handlers
+                    let cts = new CancellationTokenSource()
+                    let connAttemptIdsTask =
+                        players
+                        |> List.indexed
+                        |> List.choose (fun (idx, (conn, hub)) ->
+                            let connAttemptIdTcs = new TaskCompletionSource<Result<ConnAttemptId, _>>()
+                            cts.Token.Register(fun _ -> connAttemptIdTcs.TrySetCanceled() |> ignore) |> ignore
+
+                            conn.On<int, ConnAttemptId>("CreateOffer", fun _ ->
+                                Common.fakeSdpDescription
+                                |> hub.StartConnectionAttempt
+                                |> Task.map (fun res ->
+                                    res
+                                    |> connAttemptIdTcs.SetResult
+                                    |> ignore
+
+                                    match res with
+                                    | Ok c -> c
+                                    | Error _ -> failwith "Failed to create connection attempt"
+                                )
+                            )
+                            |> ignore
+
+                            match idx = peerThatConnects with // Don't await the connection attempt creation for the peer that will connect
+                            | true -> None
+                            | false -> Some connAttemptIdTcs.Task
+                        )
+                        |> List.sequenceTaskResultA
+                        |> Task.map (Flip.Expect.wantOk "Failed to create some connection attempt")
+
+                    // Create room
+                    let! roomId =
+                        (players |> List.head |> snd).CreateRoom()
+                        |> Task.map (Flip.Expect.wantOk "Failed to create room")
+
+                    // Join room
+                    do! players
+                        |> List.tail
+                        |> List.map (fun (_, hub) -> hub.JoinRoom roomId)
+                        |> List.sequenceTaskResultA
+                        |> Task.map (Flip.Expect.isOk "All players should be able to join the room")
+
+                    // Connect players
+                    let hub = players |> List.item peerThatConnects |> snd
+                    let! res =
+                        hub.ConnectToRoomPlayers()
+                        |> Task.map (Flip.Expect.wantOk "Failed to create connection information for players")
+
+                    cts.CancelAfter 1000
+                    let! connAttemptIds = connAttemptIdsTask
+
+                    Expect.isEmpty res.FailedCreations "All connection attempt creations should be successful"
+                    Expect.hasLength res.PlayersConnInfo (players.Length - 1) "Their should be one player connection info per player to connect to"
+                    Expect.hasLength connAttemptIds (players.Length - 1) "Their should be one connection attempt id per players to connect to"
+                    Expect.hasLength connAttemptIds res.PlayersConnInfo.Length "Their should be one connection attempt id per player connection info"
+
+                    Expect.containsAll
+                        connAttemptIds
+                        (res.PlayersConnInfo |> Array.map _.ConnAttemptId)
+                        "Created connection attempt ids should be the same that the received connection attempt ids"
+                }
+
+            testTask "Connect to players without a CreateOffer handler" {
                 let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
                 let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
 
@@ -202,16 +318,81 @@ let signalingTests =
                     signalingHub1.CreateRoom()
                     |> Task.map (Flip.Expect.wantOk "Room creation should success")
 
-                let! (error: Errors.JoinRoomError) =
-                    signalingHub2.JoinRoom roomId
-                    |> Task.map (Flip.Expect.wantError "Room joining should fail")
+                do! signalingHub2.JoinRoom roomId
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+
+                let! (res: RoomConnectionInfo) =
+                    signalingHub2.ConnectToRoomPlayers()
+                    |> Task.map (Flip.Expect.wantOk "Connecting to room players should return an \"Ok\" result")
+
+                Expect.sequenceEqual
+                    res.FailedCreations
+                    [ 1 ] // 1 is the peerId of the first player, the one who created the room
+                    "Joining room without add handler for CreateOffer should fail"
+
+                Expect.isEmpty res.PlayersConnInfo "No connection info should be returned"
+            }
+
+            testTask "Connect to players while not in a room" {
+                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+
+                let! (error: Errors.ConnectToRoomPlayersError) =
+                    signalingHub.ConnectToRoomPlayers()
+                    |> Task.map (Flip.Expect.wantError "Connecting to room players while not in a room should return an error")
 
                 Expect.equal
                     error
-                    Errors.JoinRoomError.FailedToCreateOffer
-                    "Joining room without add handler for CreateOffer should fail"
+                    Errors.ConnectToRoomPlayersError.NotInARoom
+                    "Connecting to room players while not in a room should fail"
             }
         ]
+
+        // testList "LeaveRoom" [
+        //     testTask "Leave room" {
+        //         let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
+        //         let! (conn2: HubConnection, signalingHub2: ISignalingHub) = testServer |> connectHub
+
+        //         let mutable offerId = None
+
+        //         // Add handler for creating offer
+        //         conn1.On<int, ConnAttemptId>("CreateOffer", fun _playerId ->
+        //             Common.fakeSdpDescription
+        //             |> signalingHub1.StartConnectionAttempt
+        //             |> Task.map (function
+        //                 | Ok o -> offerId <- Some o; o
+        //                 | Error e -> failwithf "Failed to create offer: %A" e)
+        //         )
+        //         |> ignore
+
+        //         // Create a room and check if it was created
+        //         let! roomId =
+        //             signalingHub1.CreateRoom()
+        //             |> Task.map (Flip.Expect.wantOk "Room creation should success")
+
+        //         roomStore.Get roomId
+        //         |> Flip.Expect.isSome "Room should be created"
+
+        //         // Join the room
+        //         do! signalingHub2.JoinRoom roomId
+        //             |> Task.map (Flip.Expect.wantOk "Room joining should success")
+        //             |> Task.map ignore // ignore the playerId returned by the hub
+
+        //         // Leave the room
+        //         do! signalingHub2.LeaveRoom()
+        //             |> Task.map (Flip.Expect.isOk "Leaving room should success")
+
+        //         // Check if the room was removed
+        //         roomStore.Get roomId
+        //         |> Flip.Expect.isNone "Room should be removed"
+
+        //         // Check if the player is not in the room anymore
+        //         let playerConn =
+        //             playerConnStore.Get (conn2.ConnectionId |> ConnId.parse)
+        //             |> Flip.Expect.wantSome "Player should still exist"
+
+        //         Expect.isNone playerConn.RoomId "Player should not be in a room anymore"
+        //     }
+        // ]
 
         testList "StartConnectionAttempt" [
             testTask "Create connection attempt" {
