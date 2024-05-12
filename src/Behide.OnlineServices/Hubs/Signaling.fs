@@ -68,9 +68,10 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let removeConnAttemptsError =
                 playerConn.ConnAttemptIds
                 |> List.choose (fun connAttemptId ->
-                    connAttemptId
-                    |> connAttemptStore.Remove
-                    |> function
+                    match connAttemptId |> connAttemptStore.Get with
+                    | None -> None
+                    | Some _ ->
+                        match connAttemptId |> connAttemptStore.Remove with
                         | true -> None
                         | false -> Some connAttemptId
                 )
@@ -94,7 +95,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 | None, None, None -> Ok ()
                 | _ ->
                     sprintf
-                        "\nLeave room error: %s\nRemove connection attempt error: %s\Remove player connection error: %s"
+                        "\nLeave room error: %s\nRemove connection attempt error: %s\nRemove player connection error: %s"
                         (leaveRoomError |> Option.defaultValue "None")
                         (removeConnAttemptsError |> Option.defaultValue "None")
                         (removePlayerConnectionError |> Option.defaultValue "None")
