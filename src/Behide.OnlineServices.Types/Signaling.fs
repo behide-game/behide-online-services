@@ -124,12 +124,11 @@ module Errors =
         | NotParticipant = 3
 
     [<RequireQualifiedAccess>]
-    type EndConnectionAttemptError = // To test
+    type EndConnectionAttemptError =
         | PlayerConnectionNotFound = 0
         | OfferNotFound = 1
-        | AnswererNotFound = 2
-        | NotParticipant = 3
-        | FailedToRemoveOffer = 4
+        | NotParticipant = 2
+        | FailedToRemoveOffer = 3
 
     [<RequireQualifiedAccess>]
     type CreateRoomError =

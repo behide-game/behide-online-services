@@ -250,13 +250,13 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 |> connAttemptStore.Get
                 |> Result.ofOption EndConnectionAttemptError.OfferNotFound
 
-            let! answerer =
-                connAttempt.Answerer
-                |> Result.ofOption EndConnectionAttemptError.AnswererNotFound
-
             // Check if the client is in the connection attempt
-            do! (connId = connAttempt.InitiatorConnectionId || connId = answerer)
-                |> Result.requireTrue EndConnectionAttemptError.NotParticipant
+            match connId = connAttempt.InitiatorConnectionId with
+            | true -> ()
+            | false ->
+                do! connAttempt.Answerer
+                    |> Result.ofOption EndConnectionAttemptError.NotParticipant
+                    |> Result.bind ((=) connId >> Result.requireTrue EndConnectionAttemptError.NotParticipant)
 
             // Remove connection attempt
             do! connAttemptStore.Remove connAttemptId

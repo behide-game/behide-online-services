@@ -614,6 +614,155 @@ let signalingTests =
             }
         ]
 
+        testList "EndConnectionAttempt" [
+            testTask "Initiator end connection attempt" {
+                let! (_, hub1: ISignalingHub) = testServer |> connectHub
+                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+
+                // Create connection attempt
+                let! offerId =
+                    Common.fakeSdpDescription
+                    |> hub1.StartConnectionAttempt
+                    |> Task.map (Flip.Expect.wantOk "Connection attempt creation should success")
+
+                // Join connection attempt
+                do! offerId
+                    |> hub2.JoinConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt joining should success")
+
+                // End connection attempt
+                do! offerId
+                    |> hub1.EndConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt ending should success")
+
+                // Check if the offer is removed
+                offerStore.Get offerId
+                |> Flip.Expect.isNone "Offer should be removed"
+            }
+
+            testTask "Answerer end connection attempt" {
+                let! (_, hub1: ISignalingHub) = testServer |> connectHub
+                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+
+                // Create connection attempt
+                let! offerId =
+                    Common.fakeSdpDescription
+                    |> hub1.StartConnectionAttempt
+                    |> Task.map (Flip.Expect.wantOk "Connection attempt creation should success")
+
+                // Join connection attempt
+                do! offerId
+                    |> hub2.JoinConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt joining should success")
+
+                // End connection attempt
+                do! offerId
+                    |> hub2.EndConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt ending should success")
+
+                // Check if the offer is removed
+                offerStore.Get offerId
+                |> Flip.Expect.isNone "Offer should be removed"
+            }
+
+            testTask "End nonexisting connection attempt" {
+                let! (_, hub: ISignalingHub) = testServer |> connectHub
+
+                let fakeOfferId = ConnAttemptId.create()
+
+                let! (error: Errors.EndConnectionAttemptError) =
+                    hub.EndConnectionAttempt fakeOfferId
+                    |> Task.map (Flip.Expect.wantError "Ending nonexisting connection attempt should return an error")
+
+                Expect.equal
+                    error
+                    Errors.EndConnectionAttemptError.OfferNotFound
+                    "Ending nonexisting connection attempt should fail"
+            }
+
+            testTask "End ended connection attempt" {
+                let! (_, hub1: ISignalingHub) = testServer |> connectHub
+                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+
+                // Create connection attempt
+                let! offerId =
+                    Common.fakeSdpDescription
+                    |> hub1.StartConnectionAttempt
+                    |> Task.map (Flip.Expect.wantOk "Connection attempt creation should success")
+
+                // Join connection attempt
+                do! offerId
+                    |> hub2.JoinConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt joining should success")
+
+                // End connection attempt
+                do! offerId
+                    |> hub1.EndConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt ending should success")
+
+                // End connection attempt again
+                let! (error: Errors.EndConnectionAttemptError) =
+                    offerId
+                    |> hub1.EndConnectionAttempt
+                    |> Task.map (Flip.Expect.wantError "Ending already ended connection attempt should return an error")
+
+                Expect.equal
+                    error
+                    Errors.EndConnectionAttemptError.OfferNotFound
+                    "Ending already ended connection attempt should fail"
+            }
+
+            testTask "End connection attempt as not participant" {
+                let! (_, hub1: ISignalingHub) = testServer |> connectHub
+                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+
+                // Create connection attempt
+                let! offerId =
+                    Common.fakeSdpDescription
+                    |> hub1.StartConnectionAttempt
+                    |> Task.map (Flip.Expect.wantOk "Connection attempt creation should success")
+
+                // End connection attempt
+                let! (error: Errors.EndConnectionAttemptError) =
+                    offerId
+                    |> hub2.EndConnectionAttempt
+                    |> Task.map (Flip.Expect.wantError "Ending connection attempt as not participant should return an error")
+
+                Expect.equal
+                    error
+                    Errors.EndConnectionAttemptError.NotParticipant
+                    "Ending connection attempt as not participant should fail"
+            }
+
+            testTask "End answered connection attempt as not participant" {
+                let! (_, hub1: ISignalingHub) = testServer |> connectHub // Initiator
+                let! (_, hub2: ISignalingHub) = testServer |> connectHub // Answerer
+                let! (_, hub3: ISignalingHub) = testServer |> connectHub // Other
+
+                // Create connection attempt
+                let! offerId =
+                    Common.fakeSdpDescription
+                    |> hub1.StartConnectionAttempt
+                    |> Task.map (Flip.Expect.wantOk "Connection attempt creation should success")
+
+                // Join connection attempt
+                do! offerId
+                    |> hub2.JoinConnectionAttempt
+                    |> Task.map (Flip.Expect.isOk "Connection attempt joining should success")
+
+                // End connection attempt as not participant
+                let! (error: Errors.EndConnectionAttemptError) =
+                    offerId
+                    |> hub3.EndConnectionAttempt
+                    |> Task.map (Flip.Expect.wantError "Ending connection attempt as not participant should return an error")
+
+                Expect.equal
+                    error
+                    Errors.EndConnectionAttemptError.NotParticipant
+                    "Ending connection attempt as not participant should fail"
+            }
+        ]
+
         testList "SendAnswer" [
             testTask "Send answer" {
                 let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
