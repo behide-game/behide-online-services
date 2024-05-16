@@ -157,7 +157,8 @@ module Errors =
         | PlayerConnectionNotFound = 0
         | NotInARoom = 1
         | FailedToUpdateRoom = 2
-        | FailedToUpdatePlayerConnection = 3
+        | FailedToRemoveRoom = 3
+        | FailedToUpdatePlayerConnection = 4
 
 open Errors
 

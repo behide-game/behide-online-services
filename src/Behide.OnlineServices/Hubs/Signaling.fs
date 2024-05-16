@@ -456,23 +456,29 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                     |> Option.bind roomStore.Get
                     |> Result.ofOption LeaveRoomError.NotInARoom
 
-                // Remove player connections and player from room
-                let newConnections =
-                    room.Connections
-                    |> List.filter (fun (p1, p2) ->
-                        match playerConnId with
-                        | Equals p1 -> false
-                        | Equals p2 -> false
-                        | _ -> true
-                    )
+                match room.Players |> List.length with
+                | 1 -> // If the player is the last one in the room, remove the room
+                    do! roomStore.Remove room.Id
+                        |> Result.requireTrue LeaveRoomError.FailedToRemoveRoom
 
-                let newRoom =
-                    { room with
-                        Players = room.Players |> List.filter (snd >> (<>) playerConnId)
-                        Connections = newConnections}
+                | _ ->
+                    // Remove player connections and player from room
+                    let newConnections =
+                        room.Connections
+                        |> List.filter (fun (p1, p2) ->
+                            match playerConnId with
+                            | Equals p1 -> false
+                            | Equals p2 -> false
+                            | _ -> true
+                        )
 
-                do! roomStore.Update room.Id room newRoom
-                    |> Result.requireTrue LeaveRoomError.FailedToUpdateRoom
+                    let newRoom =
+                        { room with
+                            Players = room.Players |> List.filter (snd >> (<>) playerConnId)
+                            Connections = newConnections}
+
+                    do! roomStore.Update room.Id room newRoom
+                        |> Result.requireTrue LeaveRoomError.FailedToUpdateRoom
             })
 
             // Update player connection

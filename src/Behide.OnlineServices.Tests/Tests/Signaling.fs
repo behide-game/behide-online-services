@@ -476,6 +476,23 @@ let signalingTests =
                     Errors.LeaveRoomError.NotInARoom
                     "Leaving room while not in a room should fail"
             }
+
+            testTask "Leave room while being the last player delete the room" {
+                let! (_, hub1: ISignalingHub) = testServer |> connectHub
+
+                // Create room
+                let! roomId =
+                    hub1.CreateRoom()
+                    |> Task.map (Flip.Expect.wantOk "Room creation should success")
+
+                // Leave room
+                do! hub1.LeaveRoom()
+                    |> Task.map (Flip.Expect.wantOk "Leaving room should success")
+
+                // Check if the room is removed
+                roomStore.Get roomId
+                |> Flip.Expect.isNone "Room should be removed"
+            }
         ]
 
         testList "StartConnectionAttempt" [
