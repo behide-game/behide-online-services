@@ -4,6 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Behide.OnlineServices.Types/Behide.OnlineServices.Types.fsproj" />
+
+    <Compile Include="Auth/Auth.fs" />
+
     <Compile Include="Helpers.fs" />
     <Compile Include="Stores.fs" />
     <Compile Include="Hubs/Signaling.fs" />
