@@ -2,61 +2,73 @@ module Behide.OnlineServices.Auth
 
 open Falco
 open Falco.Routing
-open System
-open Microsoft.AspNetCore.Http.Extensions
+open Microsoft.AspNetCore.Authentication
+open Common.Auth
+open Microsoft.AspNetCore.Http
+open System.Net
 open System.Threading.Tasks
+open FsToolkit.ErrorHandling
 
-let clientId = ""
-let clientSecret = ""
+type Provider =
+    | Discord
+    | Google
+    | Microsoft
 
-let challengeGoogle : HttpHandler =
-    let queryBuilder = QueryBuilder()
-    queryBuilder.Add("client_id", clientId)
-    queryBuilder.Add("response_type", "code")
-    queryBuilder.Add("scope", "openid profile email")
-    queryBuilder.Add("redirect_uri", "http://localhost:5001/auth/signin-google")
-    queryBuilder.Add("access_type", "offline")
+    static member parse (provider: string) =
+        match provider with
+        | "discord" -> Some Discord
+        | "google" -> Some Google
+        | "microsoft" -> Some Microsoft
+        | _ -> None
 
-    let uriBuilder = UriBuilder "https://accounts.google.com/o/oauth2/v2/auth"
-    uriBuilder.Query <- queryBuilder.ToString()
+    static member toString (provider: Provider) =
+        match provider with
+        | Discord -> "discord"
+        | Google -> "google"
+        | Microsoft -> "microsoft"
 
-    uriBuilder.ToString()
-    |> Response.redirectTemporarily
+let signUpHandler (ctx: HttpContext) : Task = task {
+    let route = ctx |> Request.getRoute
+    let providerOpt =
+        route.TryGetString "provider"
+        |> Option.bind Provider.parse
 
-let afterChallengingUser ctx : Task = task {
-    let query = ctx |> Request.getQuery
-
-    let errorOpt = query.TryGetString "error"
-    let codeOpt = query.TryGetString "code"
-
-    match codeOpt with
-    | None -> return! Response.ofPlainText "Failed to sign in with Google" ctx
-    | Some code ->
-        let content = new Net.Http.FormUrlEncodedContent([
-            "client_id", clientId
-            "client_secret", clientSecret
-            "code", code
-            "grant_type", "authorization_code"
-            "redirect_uri", "http://localhost:5001/auth/signin-google"
-        ] |> dict)
-
-        let uriBuilder = UriBuilder "https://oauth2.googleapis.com/token"
-
-        let httpClient = new Net.Http.HttpClient()
-        let! response = httpClient.PostAsync(uriBuilder.Uri, content)
-        let! responseJson = response.Content.ReadAsStringAsync()
-        // responseJson contains the access token and the ID_TOKEN !
-
-        return! Response.ofJson responseJson ctx
+    return! providerOpt |> function
+        | None ->
+            ctx
+            |> Response.withStatusCode (HttpStatusCode.BadRequest |> int)
+            |> Response.ofPlainText "Invalid provider"
+        | Some provider ->
+            Response.challengeWithRedirect
+                (provider |> Provider.toString)
+                "/auth/sign-up-complete"
+                ctx
 }
 
 let endpoints = [
-    get "/auth/sign-in" challengeGoogle
-    get "/auth/sign-out" (Response.ofPlainText "Sign out")
+    get "/auth/sign-up/{provider:alpha}" signUpHandler
+    get "/auth/sign-up-complete" (fun ctx -> task {
+        let getToken tokenName =
+            tokenName
+            |> ctx.GetTokenAsync
+            |> Task.map Option.ofNull
 
-    get "/auth/signin-google" afterChallengingUser
-    // get "/auth/signin-google" (fun ctx -> task {
-    //     ctx |> Auth.getUser |> printfn "%A"
-    //     return Response.ofPlainText "Signed in with Google" ctx
-    // })
+        let! token = task {
+            let! idToken = getToken "id_token"
+
+            match idToken with
+            | Some _ -> return idToken
+            | None -> return! getToken "access_token"
+        }
+
+        let! refreshToken = getToken "refresh_token"
+
+        return
+            ctx
+            |> Response.clearAllCookies
+            |> Response.ofJson {|
+                token = token
+                refreshToken = refreshToken
+            |}
+    })
 ]
