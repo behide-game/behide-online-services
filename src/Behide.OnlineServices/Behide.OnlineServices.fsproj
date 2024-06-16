@@ -5,10 +5,22 @@
   <ItemGroup>
     <ProjectReference Include="../Behide.OnlineServices.Types/Behide.OnlineServices.Types.fsproj" />
 
-    <Compile Include="Auth/Common.fs" />
-    <Compile Include="Auth/Auth.fs" />
-
     <Compile Include="Helpers.fs" />
+    <Compile Include="Common.fs" />
+
+    <Compile Include="Domain/Auth.fs" />
+    <Compile Include="Domain/Types.fs" />
+
+    <Compile Include="Repository/Serialization/DiscriminatedUnionSerializer.fs" />
+    <Compile Include="Repository/Serialization/GuidSerializer.fs" />
+    <Compile Include="Repository/Serialization/SingleUnionTypeSerializer.fs" />
+    <Compile Include="Repository/Serialization/SerializerProvider.fs" />
+    <Compile Include="Repository/Database.fs" />
+
+    <Compile Include="Api/Auth/Common.fs" />
+    <Compile Include="Api/Auth/Jwt.fs" />
+    <Compile Include="Api/Auth/Auth.fs" />
+
     <Compile Include="Stores.fs" />
     <Compile Include="Hubs/Signaling.fs" />
     <Compile Include="Program.fs" />
@@ -20,6 +32,10 @@
     <PackageReference Include="FsToolkit.ErrorHandling" Version="4.13.0" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="4.13.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="8.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.6" />
+    <PackageReference Include="mongocsharpdriver" Version="2.26.0" />
+    <PackageReference Include="MongoDB.FSharp" Version="0.1.0" />
+    <PackageReference Include="NamelessInteractive.FSharp.MongoDB" Version="0.0.4" />
   </ItemGroup>
 </Project>

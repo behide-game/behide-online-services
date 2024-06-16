@@ -1,4 +1,4 @@
-namespace Common.Auth
+namespace Behide.OnlineServices.Auth.Common
 
 module Response =
     open Falco
