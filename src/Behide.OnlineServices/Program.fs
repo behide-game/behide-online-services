@@ -1,5 +1,7 @@
 module Behide.OnlineServices.Program
 
+open Behide.OnlineServices
+open Behide.OnlineServices.Common
 open Behide.OnlineServices.Hubs
 
 open Falco
