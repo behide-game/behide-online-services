@@ -21,17 +21,23 @@ type Provider =
         | Google -> "google"
         | Microsoft -> "microsoft"
 
+    static member fromJwtIssuer issuer =
+        // Discord is not a JWT provider
+        match issuer with
+        | "https://accounts.google.com" -> Some Google
+        | "https://login.microsoftonline.com//v2.0" -> Some Microsoft
+        | _ -> None
+
 type ProviderConnection =
     | Discord of string
     | Google of string
     | Microsoft of string
 
-    static member fromIssuer issuer nameIdentifier =
-        match issuer with
-        | "https://discord.com" -> nameIdentifier |> Discord |> Some
-        | "https://accounts.google.com" -> nameIdentifier |> Google |> Some
-        | "https://login.microsoftonline.com//v2.0" -> nameIdentifier |> Microsoft |> Some
-        | _ -> None
+    static member fromProviderAndId (provider: Provider) (id: string) =
+        match provider with
+        | Provider.Discord -> Discord id
+        | Provider.Google -> Google id
+        | Provider.Microsoft -> Microsoft id
 
 type RefreshToken =
     { Token: string
