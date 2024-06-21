@@ -1,6 +1,8 @@
 namespace Behide.OnlineServices.Auth
 
 open System
+open Behide.OnlineServices
+open Behide.OnlineServices.Common
 
 [<RequireQualifiedAccess>]
 type Provider =
@@ -22,10 +24,12 @@ type Provider =
         | Microsoft -> "microsoft"
 
     static member fromJwtIssuer issuer =
+        let microsoftIssuer = sprintf "https://login.microsoftonline.com/%s/v2.0" Config.Auth.Microsoft.tenantId
+
         // Discord is not a JWT provider
         match issuer with
         | "https://accounts.google.com" -> Some Google
-        | "https://login.microsoftonline.com//v2.0" -> Some Microsoft
+        | Equals microsoftIssuer -> Some Microsoft
         | _ -> None
 
 type ProviderConnection =

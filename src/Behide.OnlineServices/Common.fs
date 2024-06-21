@@ -46,6 +46,7 @@ module Config =
             let clientSecret = get "AUTH_GOOGLE_CLIENT_SECRET"
 
         module Microsoft =
+            let tenantId = get "AUTH_MICROSOFT_TENANT_ID"
             let clientId = get "AUTH_MICROSOFT_CLIENT_ID"
             let clientSecret = get "AUTH_MICROSOFT_CLIENT_SECRET"
 
