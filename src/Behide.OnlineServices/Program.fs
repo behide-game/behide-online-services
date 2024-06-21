@@ -43,27 +43,26 @@ let configureServices (services: IServiceCollection) =
             options.TokenValidationParameters <- Config.Auth.JWT.validationParameters
         )
         .AddDiscord("discord", fun options ->
-            options.ClientId <- ""
-            options.ClientSecret <- ""
+            options.ClientId <- Config.Auth.Discord.clientId
+            options.ClientSecret <- Config.Auth.Discord.clientSecret
             options.CallbackPath <- "/auth/provider-call-back/discord"
             options.SaveTokens <- true
         )
         .AddOpenIdConnect("google", fun options ->
-            options.ClientId <- ""
-            options.ClientSecret <- ""
+            options.ClientId <- Config.Auth.Google.clientId
+            options.ClientSecret <- Config.Auth.Google.clientSecret
             options.Authority <- "https://accounts.google.com"
             options.CallbackPath <- "/auth/provider-call-back/google"
             options.SaveTokens <- true
 
             options.ResponseType <- "code"
-            // options.Prompt <- "consent"
-            options.SaveTokens <- true
             options.Scope.Add("openid")
             options.Scope.Add("profile")
             options.Scope.Add("email")
 
             options.TokenValidationParameters <- new TokenValidationParameters(
                 ValidIssuer = "accounts.google.com",
+                ValidAudience = Config.Auth.Google.clientId,
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
@@ -75,10 +74,10 @@ let configureServices (services: IServiceCollection) =
                 Task.CompletedTask
         )
         .AddOpenIdConnect("microsoft", fun options ->
-            options.ClientId <- ""
-            options.ClientSecret <- ""
-            options.Authority <- ""
-
+            options.ClientId <- Config.Auth.Microsoft.clientId
+            options.ClientSecret <- Config.Auth.Microsoft.clientSecret
+            let authority = sprintf "https://login.microsoftonline.com/%s/v2.0" Config.Auth.Microsoft.tenantId
+            options.Authority <- authority
             options.CallbackPath <- "/auth/provider-call-back/microsoft"
             options.SaveTokens <- true
 
@@ -87,6 +86,8 @@ let configureServices (services: IServiceCollection) =
             options.Scope.Add("openid")
 
             options.TokenValidationParameters <- new TokenValidationParameters(
+                ValidIssuer = authority,
+                ValidAudience = Config.Auth.Microsoft.clientId,
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
