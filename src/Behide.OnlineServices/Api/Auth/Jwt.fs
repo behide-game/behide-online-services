@@ -32,7 +32,9 @@ let private createJwtUserClaims userId =
     Claim(ClaimTypes.NameIdentifier, userId)
     |> Seq.singleton
 
-let private hashToken user token = Microsoft.AspNetCore.Identity.PasswordHasher().HashPassword(user, token)
+let private passwordHasher = Microsoft.AspNetCore.Identity.PasswordHasher<UserId>()
+
+let private hashToken userId token = passwordHasher.HashPassword(userId, token)
 
 // Public
 let generateTokens userId =
@@ -45,33 +47,33 @@ let generateTokens userId =
 
     {| AccessToken = accessToken
        RefreshToken = refreshToken
-       AccessTokenHash = accessToken |> hashToken userId
-       RefreshTokenHash = refreshToken |> RefreshToken.raw |> hashToken userId |}
+       RefreshTokenHash =
+        { Hash = refreshToken |> RefreshToken.raw |> hashToken userId
+          Expiration = refreshToken.Expiration } |}
 
-// let verifyUserTokens
-//     user
-//     accessToken
-//     refreshToken
-//     accessTokenHash
-//     refreshTokenHash
-//     = result {
-//     let passwordHasher = Microsoft.AspNetCore.Identity.PasswordHasher()
+let getUserIdFromToken (token: string) =
+    let handler = new JwtSecurityTokenHandler()
+    let mutable validatedToken: SecurityToken = upcast new JwtSecurityToken()
 
-//     try
-//         do! passwordHasher.VerifyHashedPassword(user, accessTokenHash, accessToken)
-//             |> function
-//                 | Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed -> false
-//                 | _ -> true
-//             |> Result.requireTrue "Invalid access token"
+    try
+        let claims = handler.ValidateToken(token, Config.validationParameters, &validatedToken)
+        claims.Claims
+        |> Seq.tryFind (fun claim -> claim.Type = ClaimTypes.NameIdentifier)
+        |> Option.bind (fun claim -> claim.Value |> UserId.tryParse)
+        |> Result.ofOption "Name identifier claim not found"
+    with ex -> Error $"Exception: {ex.Message}"
 
-//         do! passwordHasher.VerifyHashedPassword(user, refreshTokenHash, refreshToken)
-//             |> function
-//                 | Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed -> false
-//                 | _ -> true
-//             |> Result.requireTrue "Invalid refresh token"
-
-//     with e -> return! Error e.Message
-// }
+/// Returns true if the refresh token is valid
+let validRefreshToken userId (refreshTokenHash: RefreshTokenHash) refreshToken =
+    try
+        DateTimeOffset.Now < refreshTokenHash.Expiration
+        &&
+        passwordHasher.VerifyHashedPassword(userId, refreshTokenHash.Hash, refreshToken)
+        |> function
+            | Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed -> false
+            | _ -> true
+    with
+    | _ -> false
 
 // let validateToken (token: string) = // to test
 //     let handler = new JwtSecurityTokenHandler()

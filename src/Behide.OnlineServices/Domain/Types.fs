@@ -18,5 +18,7 @@ type User = {
     Id: UserId
     Name: string
     AuthConnection: Auth.ProviderConnection
-    TokenHashes: Auth.TokenHashes
+    RefreshTokenHashes: Auth.RefreshTokenHash array
+    // Don't store access token hashes because they are signed
+    // and can be verified without a database lookup
 }

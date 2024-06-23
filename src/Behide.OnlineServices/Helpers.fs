@@ -23,3 +23,11 @@ module TaskOption =
             | Some value -> return Some value
             | None -> return! defThunk ()
         }
+
+module Base64 =
+    let inline encode (str: string) =
+        System.Text.Encoding.ASCII.GetBytes str
+        |> System.Convert.ToBase64String
+
+module String =
+    let inline toLower (str: string) = str.ToLowerInvariant()
