@@ -21,25 +21,16 @@ module Users =
 
     let insert = collection.InsertOneAsync
 
-    // let findByUserId (userId: UserId) : Task<User option> =
-    //     let filter = {| ``_id`` = userId |}
+    let findUserById (userId: UserId) : Task<User option> =
+        let filter = {| ``_id`` = userId |}
 
-    //     filter.ToBsonDocument()
-    //     |> BsonDocumentFilterDefinition
-    //     |> collection.FindAsync
-    //     |> Task.bind (fun users -> users.FirstOrDefaultAsync())
-    //     |> Task.map Option.ofNull
+        filter.ToBsonDocument()
+        |> BsonDocumentFilterDefinition
+        |> collection.FindAsync
+        |> Task.bind (fun users -> users.FirstOrDefaultAsync())
+        |> Task.map Option.ofNull
 
-    // let findAllByUserEmail (email: Email) : Task<User list> =
-    //     let filter = {| ``AuthConnections.Email`` = email |}
-
-    //     filter.ToBsonDocument()
-    //     |> BsonDocumentFilterDefinition
-    //     |> collection.FindAsync
-    //     |> Task.bind (fun users -> users.ToListAsync())
-    //     |> Task.map Seq.toList
-
-    let findByUserNameIdentifier (nameIdentifier: string) : Task<User option> =
+    let findUserByNameIdentifier (nameIdentifier: string) : Task<User option> =
         let filter = {| ``AuthConnection.Fields.0`` = nameIdentifier |}
 
         filter.ToBsonDocument()
@@ -48,60 +39,36 @@ module Users =
         |> Task.bind (fun users -> users.FirstOrDefaultAsync())
         |> Task.map Option.ofNull
 
-    // let findAllByUserNameIdentifier (nameIdentifier: string) : Task<User list> =
-    //     let filter = {| ``AuthConnections.NameIdentifier`` = nameIdentifier |}
+    let addRefreshTokenHashToUser userId (newRefreshTokenHash: Auth.RefreshTokenHash) =
+        let filter = {| ``_id.UserId`` = userId |> UserId.raw |}
+        let update = {| ``$push`` = {| RefreshTokenHashes = newRefreshTokenHash |} |}
 
-    //     filter.ToBsonDocument()
-    //     |> BsonDocumentFilterDefinition
-    //     |> collection.FindAsync
-    //     |> Task.bind (fun users -> users.ToListAsync())
-    //     |> Task.map Seq.toList
+        collection.UpdateOneAsync(
+            filter.ToBsonDocument(),
+            update.ToBsonDocument()
+        )
+        |> Task.map (fun res ->
+            result {
+                do! res.IsAcknowledged |> Result.requireTrue ()
+                do! res.MatchedCount |> Result.requireEqualTo 1 ()
+                do! res.ModifiedCount |> Result.requireEqualTo 1 ()
+            }
+        )
 
-    // let updateTokenHashes userId (accessTokenHash: string) (refreshTokenHash: string) =
-    //     let filter = {| ``_id.UserId`` = userId |> UserId.raw |}
-    //     let update = {| ``$set`` = {|
-    //         AccessTokenHash = accessTokenHash
-    //         RefreshTokenHash = refreshTokenHash
-    //     |} |}
+    let replaceRefreshTokenHashToUser userId (oldRefreshTokenHash: Auth.RefreshTokenHash) (newRefreshTokenHash: Auth.RefreshTokenHash) =
+        let filter =
+            {| ``_id`` = userId
+               ``RefreshTokenHashes`` = oldRefreshTokenHash |}
+        let update = {| ``$set`` = {| ``RefreshTokenHashes.$`` = newRefreshTokenHash |} |}
 
-    //     collection.UpdateOneAsync(
-    //         filter.ToBsonDocument(),
-    //         update.ToBsonDocument()
-    //     )
-    //     |> TaskResult.simpleCatch (fun exn -> sprintf "Repository error, failed to update user tokens: %s" (exn.ToString()))
-    //     |> TaskResult.map ignore
-
-    // let getAuthConnections userId =
-    //     let aggregation =[|
-    //         {| ``$match`` = {| ``_id.UserId`` = userId |> UserId.raw |} |}.ToBsonDocument()
-    //         {| ``$project`` =
-    //             {| ``_id`` = 0
-    //                AuthConnections = 1 |} |}.ToBsonDocument()
-    //     |]
-
-    //     aggregation
-    //     |> BsonDocumentStagePipelineDefinition
-    //     |> collection.AggregateAsync<{| AuthConnections: AuthConnection array |}>
-    //     |> TaskResult.simpleCatch (fun exn -> sprintf "Repository error, failed to retrieve auth connections: %s" (exn.ToString()))
-    //     |> Task.bind (fun res -> task {
-    //         match res with
-    //         | Ok x ->
-    //             let! y = x.FirstAsync()
-    //             return Ok y.AuthConnections
-    //         | Error error ->
-    //             return
-    //                 error
-    //                 |> sprintf "Repository error, failed to retrieve auth connections, user not found: %s"
-    //                 |> Error
-    //     })
-
-    // let addAuthConnection userId (newAuthConnection: AuthConnection) =
-    //     let filter = {| ``_id.UserId`` = userId |> UserId.raw |}
-    //     let update = {| ``$push`` = {| AuthConnections = newAuthConnection |} |}
-
-    //     collection.UpdateOneAsync(
-    //         filter.ToBsonDocument(),
-    //         update.ToBsonDocument()
-    //     )
-    //     |> TaskResult.simpleCatch (fun exn -> sprintf "Repository error, failed to add auth connection: %s" (exn.ToString()))
-    //     |> TaskResult.map ignore
+        collection.UpdateOneAsync(
+            filter.ToBsonDocument(),
+            update.ToBsonDocument()
+        )
+        |> Task.map (fun res ->
+            result {
+                do! res.IsAcknowledged |> Result.requireTrue ()
+                do! res.MatchedCount |> Result.requireEqualTo 1 ()
+                do! res.ModifiedCount |> Result.requireEqualTo 1 ()
+            }
+        )

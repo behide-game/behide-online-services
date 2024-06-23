@@ -48,13 +48,11 @@ type RefreshToken =
       Expiration: DateTimeOffset }
 
     static member create () =
-        { Token = Guid.NewGuid().ToString()
+        { Token = Guid.NewGuid().ToString() |> Base64.encode // Encode to base64 to avoid formatting issues
           Expiration = DateTimeOffset.UtcNow.AddDays 90 }
 
     static member raw (token: RefreshToken) = token.Token
 
-type TokenHashes =
-    { AccessTokenHash: string
-      RefreshTokenHash:
-        {| RefreshTokenHash: string
-           Expiration: DateTimeOffset |} }
+type RefreshTokenHash =
+    { Hash: string
+      Expiration: DateTimeOffset }
