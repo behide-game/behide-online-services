@@ -17,6 +17,7 @@
     <Compile Include="Repository/Serialization/SerializerProvider.fs" />
     <Compile Include="Repository/Database.fs" />
 
+    <Compile Include="Api/Generated/Types.fs" />
     <Compile Include="Api/Common.fs" />
     <Compile Include="Api/Auth/Common.fs" />
     <Compile Include="Api/Auth/Jwt.fs" />
