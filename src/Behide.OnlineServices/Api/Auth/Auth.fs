@@ -2,11 +2,11 @@ module Behide.OnlineServices.Auth.Endpoints
 
 open Behide.OnlineServices
 open Behide.OnlineServices.Api.Common
+open Behide.OnlineServices.Api.Types
 
 open System.Net
 open System.Net.Http
 open System.Threading
-open System.Threading.Tasks
 open System.IdentityModel.Tokens.Jwt
 
 open Microsoft.AspNetCore.Authentication
@@ -155,8 +155,9 @@ module SignIn =
                 |> TaskResult.setError (HttpStatusCode.InternalServerError, "Failed to update user tokens")
 
             return
-                {| Token = tokens.AccessToken
-                   RefreshToken = tokens.RefreshToken.Token |}
+                { accessToken = tokens.AccessToken
+                  refreshToken = tokens.RefreshToken.Token
+                  refreshTokenExpiration = tokens.RefreshToken.Expiration }
         }
         |> Task.map (Result.eitherMap
             (fun response -> ctx |> Response.ofJson response)
@@ -212,9 +213,9 @@ module Refresh =
                 |> TaskResult.setError (HttpStatusCode.InternalServerError, "Failed to update user tokens")
 
             return
-                {| Token = newTokens.AccessToken
-                   RefreshToken = newTokens.RefreshToken.Token
-                   RefreshTokenExpiration = newTokens.RefreshToken.Expiration |}
+                { accessToken = newTokens.AccessToken
+                  refreshToken = newTokens.RefreshToken.Token
+                  refreshTokenExpiration = newTokens.RefreshToken.Expiration }
         }
         |> Task.map (Result.eitherMap
             (fun response -> ctx |> Response.ofJson response)
@@ -240,5 +241,5 @@ let endpoints = [
     get "/auth/sign-in/{provider:alpha}" (Request.mapRouteProvider SignIn.signInHandler)
     get "/auth/sign-in-complete" (SignIn.completeSignInHandler |> taskResultHandler)
 
-    post "/auth/refresh" (Refresh.refreshHandler |> taskResultHandler)
+    post "/auth/refresh-token" (Refresh.refreshHandler |> taskResultHandler)
 ]
