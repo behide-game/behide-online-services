@@ -55,11 +55,9 @@ module Users =
             }
         )
 
-    let replaceRefreshTokenHashToUser userId (oldRefreshTokenHash: Auth.RefreshTokenHash) (newRefreshTokenHash: Auth.RefreshTokenHash) =
-        let filter =
-            {| ``_id`` = userId
-               ``RefreshTokenHashes`` = oldRefreshTokenHash |}
-        let update = {| ``$set`` = {| ``RefreshTokenHashes.$`` = newRefreshTokenHash |} |}
+    let setRefreshTokenHashesOfUser userId (hashes: Auth.RefreshTokenHash array) =
+        let filter = {| ``_id`` = userId |}
+        let update = {| ``$set`` = {| RefreshTokenHashes = hashes |} |}
 
         collection.UpdateOneAsync(
             filter.ToBsonDocument(),

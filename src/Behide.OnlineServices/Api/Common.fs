@@ -18,3 +18,13 @@ module Falco =
                     | Error task -> task
             }
             :> Task
+
+    [<RequireQualifiedAccess>]
+    module Response =
+        open Thoth.Json.Net
+
+        let ofJsonThoth encoder (json: 'a) =
+            json
+            |> encoder
+            |> Encode.toString 0
+            |> Response.ofPlainText

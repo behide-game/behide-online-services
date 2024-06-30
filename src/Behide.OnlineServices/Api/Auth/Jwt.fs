@@ -64,32 +64,11 @@ let getUserIdFromToken (token: string) =
     with ex -> Error $"Exception: {ex.Message}"
 
 /// Returns true if the refresh token is valid
-let validRefreshToken userId (refreshTokenHash: RefreshTokenHash) refreshToken =
+let verifyRefreshTokenHash userId (refreshTokenHash: RefreshTokenHash) refreshToken =
     try
-        DateTimeOffset.Now < refreshTokenHash.Expiration
-        &&
         passwordHasher.VerifyHashedPassword(userId, refreshTokenHash.Hash, refreshToken)
         |> function
             | Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed -> false
             | _ -> true
     with
     | _ -> false
-
-// let validateToken (token: string) = // to test
-//     let handler = new JwtSecurityTokenHandler()
-//     let mutable validatedToken: SecurityToken = upcast new JwtSecurityToken()
-
-//     try
-//         handler.ValidateToken(token, Config.validationParameters, &validatedToken)
-//         |> Ok
-//     with ex -> Error $"Exception: {ex.Message}"
-
-// let getUserIdFromClaims (claims: #seq<Claim>) = // to test
-//     claims
-//     |> Seq.tryFind (fun claim -> claim.Type = ClaimTypes.NameIdentifier)
-//     |> Result.ofOption "name identifier claim not found"
-//     |> Result.bind (fun claim ->
-//         claim.Value
-//         |> UserId.tryParse
-//         |> Result.ofOption "failed to parse name identifier claim"
-//     )

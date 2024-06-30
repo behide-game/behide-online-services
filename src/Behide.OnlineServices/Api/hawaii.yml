@@ -1,0 +1,8 @@
+schema: ./src/Behide.OnlineServices/Api/openapi.yml
+project: Behide.OnlineServices.Api
+output: ./Generated
+target: fsharp
+synchronous: 1
+asyncReturnType: task
+resolveReferences: false
+emptyDefinitions: ignore
