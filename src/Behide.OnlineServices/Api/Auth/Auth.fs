@@ -17,6 +17,13 @@ open Falco.Routing
 open FsToolkit.ErrorHandling
 open Thoth.Json.Net
 
+module Json =
+    let decoder<'a> = Decode.Auto.generateDecoderCached<'a> CamelCase
+    let decode<'a> = Decode.fromString decoder<'a>
+
+    let encoder<'a> = Encode.Auto.generateEncoder<'a> CamelCase
+    let encode<'a> = encoder<'a> >> Encode.toString 0
+
 let challengeProvider provider redirectUri : HttpHandler =
     match provider with
     | None ->
@@ -78,7 +85,7 @@ let getDataFromDiscordAccessToken (cts: CancellationToken) discordAccessToken = 
     let! rawJson = response.Content.ReadAsStringAsync()
     let! json =
         rawJson
-        |> Decode.Auto.fromString<{| id: string |}>
+        |> Json.decode<{| id: string |}>
         |> Result.setError (HttpStatusCode.Unauthorized, "Invalid token")
 
     return Provider.Discord, json.id
@@ -121,14 +128,6 @@ module SignUp =
                 {| Token = tokens.AccessToken
                    RefreshToken = tokens.RefreshToken.Token |}
         }
-        |> Task.map (Result.eitherMap
-            (fun response -> ctx |> Response.ofJson response)
-            (fun (statusCode, message) ->
-                ctx
-                |> Response.withStatusCode (statusCode |> int)
-                |> Response.ofPlainText message
-            )
-        )
 
 module SignIn =
     let signInHandler provider = challengeProvider provider "/auth/sign-in-complete"
@@ -159,14 +158,6 @@ module SignIn =
                   refreshToken = tokens.RefreshToken.Token
                   refreshTokenExpiration = tokens.RefreshToken.Expiration }
         }
-        |> Task.map (Result.eitherMap
-            (fun response -> ctx |> Response.ofJson response)
-            (fun (statusCode, message) ->
-                ctx
-                |> Response.withStatusCode (statusCode |> int)
-                |> Response.ofPlainText message
-            )
-        )
 
 module Refresh =
     let refreshHandler (ctx: HttpContext) =
@@ -175,7 +166,7 @@ module Refresh =
             let! (body: {| accessToken: string; refreshToken: string |}) =
                 ctx
                 |> Request.getBodyString
-                |> Task.map Decode.Auto.fromString
+                |> Task.map Json.decode
                 |> TaskResult.setError (HttpStatusCode.BadRequest, "Invalid body")
 
             let! userId =
@@ -193,10 +184,14 @@ module Refresh =
                 |> TaskResult.requireSome (HttpStatusCode.Unauthorized, "Invalid refresh token")
 
             // Check if refresh token is valid
-            let! oldRefreshTokenHash =
+            let notExpiredRefreshToken =
                 user.RefreshTokenHashes
+                |> Array.filter (RefreshTokenHash.isExpired >> not)
+
+            let! validatedRefreshTokenHash =
+                notExpiredRefreshToken
                 |> Array.tryFind (fun refreshTokenHash ->
-                    Jwt.validRefreshToken
+                    Jwt.verifyRefreshTokenHash
                         user.Id
                         refreshTokenHash
                         body.refreshToken
@@ -206,10 +201,15 @@ module Refresh =
             // Generate new tokens
             let newTokens = Jwt.generateTokens user.Id
 
-            do! Repository.Database.Users.replaceRefreshTokenHashToUser
+            let hashes =
+                notExpiredRefreshToken
+                |> Array.except [| validatedRefreshTokenHash |]
+                |> Array.append [| newTokens.RefreshTokenHash |]
+
+            // Update user
+            do! Repository.Database.Users.setRefreshTokenHashesOfUser
                     user.Id
-                    oldRefreshTokenHash
-                    newTokens.RefreshTokenHash
+                    hashes
                 |> TaskResult.setError (HttpStatusCode.InternalServerError, "Failed to update user tokens")
 
             return
@@ -217,14 +217,6 @@ module Refresh =
                   refreshToken = newTokens.RefreshToken.Token
                   refreshTokenExpiration = newTokens.RefreshToken.Expiration }
         }
-        |> Task.map (Result.eitherMap
-            (fun response -> ctx |> Response.ofJson response)
-            (fun (statusCode, message) ->
-                ctx
-                |> Response.withStatusCode (statusCode |> int)
-                |> Response.ofPlainText message
-            )
-        )
 
 module Request =
     /// Retrieve the provider from the route (the route must have ``{provider}`` in it)
@@ -234,12 +226,26 @@ module Request =
             |> Option.bind Provider.parse
         )
 
+let resultToHandler taskResultFun =
+    fun (ctx: HttpContext) ->
+        ctx
+        |> taskResultFun
+        |> Task.map (Result.eitherMap
+            (fun response -> Response.ofJsonThoth Json.encoder response ctx)
+            (fun (statusCode, message) ->
+                ctx
+                |> Response.withStatusCode (statusCode |> int)
+                |> Response.ofPlainText message
+            )
+        )
+    |> taskResultHandler
+
 let endpoints = [
     get "/auth/sign-up/{provider:alpha}" (Request.mapRouteProvider SignUp.signUpHandler)
-    get "/auth/sign-up-complete" (SignUp.completeSignUpHandler |> taskResultHandler)
+    get "/auth/sign-up-complete" (SignUp.completeSignUpHandler |> resultToHandler)
 
     get "/auth/sign-in/{provider:alpha}" (Request.mapRouteProvider SignIn.signInHandler)
-    get "/auth/sign-in-complete" (SignIn.completeSignInHandler |> taskResultHandler)
+    get "/auth/sign-in-complete" (SignIn.completeSignInHandler |> resultToHandler)
 
-    post "/auth/refresh-token" (Refresh.refreshHandler |> taskResultHandler)
+    post "/auth/refresh-token" (Refresh.refreshHandler |> resultToHandler)
 ]

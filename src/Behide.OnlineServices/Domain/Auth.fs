@@ -56,3 +56,6 @@ type RefreshToken =
 type RefreshTokenHash =
     { Hash: string
       Expiration: DateTimeOffset }
+
+    static member isExpired (hash: RefreshTokenHash) =
+        hash.Expiration < DateTimeOffset.UtcNow
