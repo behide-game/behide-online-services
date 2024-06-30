@@ -17,8 +17,8 @@ module UserId =
 type User = {
     Id: UserId
     Name: string
-    AuthConnection: Auth.ProviderConnection
-    RefreshTokenHashes: Auth.RefreshTokenHash array
+    AuthConnection: Api.Auth.ProviderConnection
+    RefreshTokenHashes: Api.Auth.RefreshTokenHash array
     // Don't store access token hashes because they are signed
     // and can be verified without a database lookup
 }

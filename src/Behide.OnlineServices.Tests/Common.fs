@@ -56,3 +56,34 @@ type TimedTaskCompletionSource<'A>(timeout: int) =
     member _.Task = tcs.Task
     member _.SetResult(result) = tcs.SetResult(result) |> ignore
     member _.SetException(ex: exn) = tcs.SetException(ex) |> ignore
+
+module private Serialization =
+    open Thoth.Json.Net
+    let decoder<'T> = Decode.Auto.generateDecoderCached<'T>()
+
+module Http =
+    open System.Net.Http
+    open System.Threading.Tasks
+    open FsToolkit.ErrorHandling
+    open Thoth.Json.Net
+
+    let send expectedStatusCode (client: HttpClient) req =
+        task {
+            let! (response: HttpResponseMessage) = client.SendAsync req
+
+            match expectedStatusCode = response.StatusCode with
+            | true -> return response
+            | false ->
+                let! body = response.Content.ReadAsStringAsync()
+                return
+                    Expecto.Tests.failtestf
+                        "Unexpected http status code.\nExpected: %s\nActual: %s\nBody: %s"
+                        (expectedStatusCode |> string)
+                        (response.StatusCode |> string)
+                        body
+        }
+
+    let parseResponse<'T> (taskResponse: Task<HttpResponseMessage>) =
+        taskResponse
+        |> Task.bind (fun res -> res.Content.ReadAsStringAsync())
+        |> Task.map (Decode.fromString Serialization.decoder<'T>)

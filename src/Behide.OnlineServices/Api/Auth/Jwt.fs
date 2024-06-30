@@ -1,4 +1,4 @@
-module Behide.OnlineServices.Auth.Jwt
+module Behide.OnlineServices.Api.Auth.Jwt
 
 open Behide.OnlineServices
 open Behide.OnlineServices.Common
@@ -53,7 +53,7 @@ let generateTokens userId =
 
 let getUserIdFromToken (token: string) =
     let handler = new JwtSecurityTokenHandler()
-    let mutable validatedToken: SecurityToken = upcast new JwtSecurityToken()
+    let mutable validatedToken: SecurityToken = new JwtSecurityToken()
 
     try
         let claims = handler.ValidateToken(token, Config.validationParameters, &validatedToken)

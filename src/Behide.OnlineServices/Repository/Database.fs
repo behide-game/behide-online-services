@@ -39,7 +39,7 @@ module Users =
         |> Task.bind (fun users -> users.FirstOrDefaultAsync())
         |> Task.map Option.ofNull
 
-    let addRefreshTokenHashToUser userId (newRefreshTokenHash: Auth.RefreshTokenHash) =
+    let addRefreshTokenHashToUser userId (newRefreshTokenHash: Api.Auth.RefreshTokenHash) =
         let filter = {| ``_id.UserId`` = userId |> UserId.raw |}
         let update = {| ``$push`` = {| RefreshTokenHashes = newRefreshTokenHash |} |}
 
@@ -55,7 +55,7 @@ module Users =
             }
         )
 
-    let setRefreshTokenHashesOfUser userId (hashes: Auth.RefreshTokenHash array) =
+    let setRefreshTokenHashesOfUser userId (hashes: Api.Auth.RefreshTokenHash array) =
         let filter = {| ``_id`` = userId |}
         let update = {| ``$set`` = {| RefreshTokenHashes = hashes |} |}
 

@@ -1,4 +1,4 @@
-namespace Behide.OnlineServices.Auth
+namespace Behide.OnlineServices.Api.Auth
 
 open System
 open Behide.OnlineServices

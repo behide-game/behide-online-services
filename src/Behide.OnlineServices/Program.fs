@@ -121,7 +121,7 @@ let main args =
         // use_authorization
         endpoints [
             get "/" (Response.ofPlainText "Hello world")
-            yield! Auth.Endpoints.endpoints
+            yield! Api.Auth.Endpoints.endpoints
         ]
     }
     0
