@@ -1,3 +1,6 @@
 bin/
 obj/
 dll/
+src/Behide.OnlineServices/Api/Generated/*
+!src/Behide.OnlineServices/Api/Generated/Types.fs
+.env
