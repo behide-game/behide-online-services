@@ -1,4 +1,4 @@
-module Behide.OnlineServices.Auth.Endpoints
+module Behide.OnlineServices.Api.Auth.Endpoints
 
 open Behide.OnlineServices
 open Behide.OnlineServices.Api.Common
