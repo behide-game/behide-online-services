@@ -19,6 +19,11 @@ open NamelessInteractive.FSharp.MongoDB
 
 
 let configureServices (services: IServiceCollection) =
+    // Register MongoDB serializers
+    SerializationProviderModule.Register()
+    Conventions.ConventionsModule.Register()
+    Serialization.SerializationProviderModule.Register()
+
     services
         .AddSignalR()
         .AddJsonProtocol(fun options ->
@@ -102,26 +107,19 @@ let appBuilder (app: IApplicationBuilder) =
         endpoints.MapHub<Signaling.SignalingHub>("/webrtc-signaling") |> ignore
     )
 
+let appEndpoints =
+    [ get "/" (Response.ofPlainText "Hello world")
+      yield! Api.Auth.Endpoints.endpoints ]
+
 [<EntryPoint>]
 let main args =
-    // Register MongoDB serializers
-    SerializationProviderModule.Register()
-    Conventions.ConventionsModule.Register()
-    Serialization.SerializationProviderModule.Register()
-
     webHost args {
-        host (fun builder ->
-            builder.ConfigureServices(fun _builder services ->
-                configureServices services
-            )
-        )
+        host (fun builder -> builder.ConfigureServices(fun _builder services -> configureServices services))
         use_middleware appBuilder
 
         // use_authentication
         // use_authorization
-        endpoints [
-            get "/" (Response.ofPlainText "Hello world")
-            yield! Api.Auth.Endpoints.endpoints
-        ]
+        endpoints appEndpoints
     }
+
     0

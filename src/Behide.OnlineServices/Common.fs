@@ -25,7 +25,6 @@ module private DotEnv =
 
     let init = load().Value
 
-
 module Config =
     open System
 
@@ -76,3 +75,4 @@ module Config =
 
     module Database =
         let connectionString = get "MONGODB_CONNECTION_STRING"
+        let databaseName = get "MONGODB_DATABASE_NAME"

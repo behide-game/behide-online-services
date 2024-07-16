@@ -26,21 +26,21 @@ let private createJwtToken claims =
     )
     |> JwtSecurityTokenHandler().WriteToken
 
-let private createJwtUserClaims userId =
+let private createJwtUserClaims userId userName =
     let userId = userId |> UserId.rawString
 
-    Claim(ClaimTypes.NameIdentifier, userId)
-    |> Seq.singleton
+    [ Claim(ClaimTypes.NameIdentifier, userId)
+      Claim(ClaimTypes.Name, userName) ]
 
 let private passwordHasher = Microsoft.AspNetCore.Identity.PasswordHasher<UserId>()
 
 let private hashToken userId token = passwordHasher.HashPassword(userId, token)
 
 // Public
-let generateTokens userId =
+let generateTokens userId userName =
     let accessToken =
-        userId
-        |> createJwtUserClaims
+        (userId, userName)
+        ||> createJwtUserClaims
         |> createJwtToken
 
     let refreshToken = RefreshToken.create()

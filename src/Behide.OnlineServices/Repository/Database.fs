@@ -12,7 +12,7 @@ open FsToolkit.ErrorHandling
 let private connectionString = Config.Database.connectionString
 let private mongo = connectionString |> MongoClient
 
-let private databaseName = "Behide"
+let private databaseName = Config.Database.databaseName
 let private database = mongo.GetDatabase databaseName
 
 module Users =

@@ -111,14 +111,15 @@ module SignUp =
 
             // Create user
             let userId = UserId.create()
-            let tokens = Jwt.generateTokens userId
+            let userName = sprintf "Test - %s" (issuer |> Provider.toString)
+            let tokens = Jwt.generateTokens userId userName
             let authConnection =
                 ProviderConnection.fromProviderAndId
                     issuer
                     providerUserId
             let user =
                 { Id = userId
-                  Name = (sprintf "Test - %s" (issuer |> Provider.toString))
+                  Name = userName
                   AuthConnection = authConnection
                   RefreshTokenHashes = tokens.RefreshTokenHash |> Array.singleton }
 
@@ -146,7 +147,7 @@ module SignIn =
                 |> Repository.Database.Users.findUserByNameIdentifier
                 |> TaskResult.requireSome (HttpStatusCode.Unauthorized, "User not found")
 
-            let tokens = Jwt.generateTokens user.Id
+            let tokens = Jwt.generateTokens user.Id user.Name
 
             do! Repository.Database.Users.addRefreshTokenHashToUser
                     user.Id
@@ -171,11 +172,8 @@ module Refresh =
 
             let! userId =
                 body.accessToken
-                |> Jwt.getUserIdFromToken
-                |> Result.mapError (fun error ->
-                    printfn "%A" error
-                    HttpStatusCode.Unauthorized, "Invalid access token"
-                )
+                |> Jwt.getUserIdFromToken // TODO: Doesn't work for expired tokens
+                |> Result.mapError (fun _ -> HttpStatusCode.Unauthorized, "Invalid access token")
 
             // Find user
             let! user =
@@ -199,7 +197,7 @@ module Refresh =
                 |> Result.requireSome (HttpStatusCode.Unauthorized, "Invalid refresh token")
 
             // Generate new tokens
-            let newTokens = Jwt.generateTokens user.Id
+            let newTokens = Jwt.generateTokens user.Id user.Name
 
             let hashes =
                 notExpiredRefreshToken
