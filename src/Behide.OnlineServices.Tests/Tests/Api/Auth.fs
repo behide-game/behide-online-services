@@ -5,8 +5,6 @@ open System.Net
 open System.Net.Http
 open System.IdentityModel.Tokens.Jwt
 open System.Security.Claims
-open Microsoft.AspNetCore.Http.Extensions
-open Microsoft.AspNetCore.Identity
 open FsToolkit.ErrorHandling
 
 open Expecto
@@ -15,14 +13,12 @@ open Expecto.Flip
 open Behide.OnlineServices
 open Behide.OnlineServices.Tests.Common
 open System.Net.Http.Json
-open Microsoft.IdentityModel.JsonWebTokens
 open Microsoft.IdentityModel.Tokens
-open System.Security.Claims
 
 
-let refreshTokensReq (accessToken: string) (refreshToken: string) =
+let createRefreshTokensReq (client: HttpClient) (accessToken: string) (refreshToken: string) =
     new HttpRequestMessage(
-        RequestUri = Uri "http://localhost:5000/auth/refresh-token",
+        RequestUri = Uri(client.BaseAddress, "/auth/refresh-token"),
         Method = HttpMethod.Post,
         Content =
             JsonContent.Create
@@ -30,96 +26,196 @@ let refreshTokensReq (accessToken: string) (refreshToken: string) =
                    refreshToken = refreshToken |}
     )
 
-let refreshTokens client accessToken refreshToken =
-    refreshTokensReq
-        accessToken
-        refreshToken
-    |> Http.send HttpStatusCode.OK client
-    |> Http.parseResponse<Api.Types.TokenPairDTO>
-    |> Task.map (Expect.wantOk "Response should be parsable")
+let verifyAccessToken (user: User) (token: string) =
+    let validationParameters = Common.Config.Auth.JWT.validationParameters
+    let handler = new JwtSecurityTokenHandler()
+    let mutable validatedToken: SecurityToken = new JwtSecurityToken()
 
-// let getClaim claimType (claims: #seq<string * string>) =
-//     claims
-//     |> Seq.tryPick (fun (type', value) ->
-//         match type' = claimType with
-//         | true -> Some value
-//         | false -> None
-//     )
-//     |> function
-//         | Some value -> value
-//         | None -> failtestf "JWT claims should contain %s" claimType
+    let claimPrincipal =
+        try
+            handler.ValidateToken(token, validationParameters, &validatedToken)
+        with error ->
+            failtestf "Access token validation failed: %s" error.Message
+
+    let getClaim claimType  =
+        claimPrincipal.FindFirstValue claimType
+        |> Option.ofNull
+        |> function
+            | Some value -> value
+            | None -> failtestf "JWT claims should contain %s" claimType
+
+    // Test claims
+    let audience = getClaim "aud"
+    let issuer = getClaim "iss"
+    let nameIdentifier = getClaim  ClaimTypes.NameIdentifier
+    let userNameClaim = getClaim ClaimTypes.Name
+
+    Expect.equal "JWT issuer should not be that" Common.Config.Auth.JWT.issuer issuer
+    Expect.equal "JWT audience should not be that" Common.Config.Auth.JWT.audience audience
+    Expect.equal "JWT name identifier should not be that" (user.Id |> UserId.rawString) nameIdentifier
+    Expect.equal "JWT name should not be that" user.Name userNameClaim
 
 
+let verifyRefreshToken
+    (user: User)
+    (refreshToken: Api.Auth.RefreshToken)
+    (refreshTokenHash: Api.Auth.RefreshTokenHash)
+    =
+    // Test refresh token hash
+    Api.Auth.Jwt.verifyRefreshTokenHash
+        user.Id
+        refreshTokenHash
+        refreshToken.Token
+    |> Expect.isTrue "Refresh token should be valid"
 
 [<Tests>]
 let tests = testList "Auth" [
+    let testServer, _ = createTestServer()
+    let client = testServer.CreateClient()
+
     testList "JWT" [
         testTask "Generate tokens" {
-            let userId = UserId.create()
-            let tokens = Api.Auth.Jwt.generateTokens userId
+            let user = User.createUser()
+            let tokens = Api.Auth.Jwt.generateTokens user.Id user.Name
 
-            let validationParameters = Common.Config.Auth.JWT.validationParameters
-            let handler = new JwtSecurityTokenHandler()
-            let mutable validatedToken: SecurityToken = new JwtSecurityToken()
-
-            let claimPrincipal =
-                try
-                    handler.ValidateToken(tokens.AccessToken, validationParameters, &validatedToken)
-                with error ->
-                    failtestf "Access token validation failed: %s" error.Message
-
-            let getClaim claimType  =
-                claimPrincipal.FindFirstValue claimType
-                |> Option.ofNull
-                |> function
-                    | Some value -> value
-                    | None -> failtestf "JWT claims should contain %s" claimType
-
-            // Test claims
-            let audience = getClaim "aud"
-            let issuer = getClaim "iss"
-            let nameIdentifier = getClaim  ClaimTypes.NameIdentifier
-
-            Expect.equal "JWT issuer should not be that" Common.Config.Auth.JWT.issuer issuer
-            Expect.equal "JWT audience should not be that" Common.Config.Auth.JWT.audience audience
-            Expect.equal "JWT name identifier should not be that" (userId |> UserId.rawString) nameIdentifier
-
-            // Test refresh token hash
-            let hasher = PasswordHasher()
-            Expect.notEqual
-                "Refresh token should be valid"
-                PasswordVerificationResult.Failed
-                (hasher.VerifyHashedPassword("", tokens.RefreshTokenHash.Hash, tokens.RefreshToken.Token))
+            verifyAccessToken user tokens.AccessToken
+            verifyRefreshToken
+                user
+                tokens.RefreshToken
+                tokens.RefreshTokenHash
         }
-
-        // testTask "Verify tokens" {
-        //     let! user, (accessToken: string), (refreshToken: string) =
-        //         Helpers.User.createUser()
-        //         |> Helpers.Database.addUser
-
-        //     BehideApi.JWT.verifyUserTokens user accessToken refreshToken
-        //     |> Expect.wantOk "Tokens should be approved"
-        // }
     ]
 
-    // testTask "Authorized user should be able to refresh his tokens" {
-    //     let client = Helpers.getClient()
-    //     let! _user, (accessToken: string), (refreshToken: string) =
-    //         Helpers.User.createUser()
-    //         |> Helpers.Database.addUser
+    testList "Refresh tokens" [
+        testTask "Authorized user should be able to refresh his tokens" {
+            let user = User.createUser()
+            do! user |> User.putInDatabase
 
-    //     // Refresh
-    //     let! (response: DTO.Auth.RefreshToken.Response) = (accessToken, refreshToken) |> refreshTokens client
+            let tokens = Api.Auth.Jwt.generateTokens user.Id user.Name
+            do! tokens.RefreshTokenHash |> User.putRefreshTokenHashInDb user
 
-    //     // Refresh with wrong tokens
-    //     do! (accessToken, refreshToken)
-    //         |> refreshTokensReq
-    //         |> Helpers.Http.send HttpStatusCode.Unauthorized client
-    //         |> Task.map ignore
+            // Refresh
+            let! (response: Api.Types.TokenPairDTO) =
+                createRefreshTokensReq
+                    client
+                    tokens.AccessToken
+                    tokens.RefreshToken.Token
+                |> client.SendAsync
+                |> Task.bind Serialization.decodeHttpResponse
 
-    //     // Re-refresh with correct tokens
-    //     do! (response.accessToken, response.refreshToken)
-    //         |> refreshTokens client
-    //         |> Task.map ignore
-    // }
+            // Check if new tokens are valid
+            verifyAccessToken user response.accessToken
+
+            // Check if new refresh token is valid
+            Expect.isTrue
+                "Refresh token should not be expired"
+                (DateTimeOffset.UtcNow < response.refreshTokenExpiration)
+        }
+
+        testTask "Unauthorized user should not be able to refresh tokens" {
+            let! (response: HttpResponseMessage) =
+                createRefreshTokensReq
+                    client
+                    "fake access token"
+                    "fake refresh token"
+                |> client.SendAsync
+
+            Expect.equal "Status code should be Unauthorized" HttpStatusCode.Unauthorized response.StatusCode
+        }
+
+        testTask "Invalid body should return BadRequest" {
+            let! (response: HttpResponseMessage) =
+                new HttpRequestMessage(
+                    RequestUri = Uri(client.BaseAddress, "/auth/refresh-token"),
+                    Method = HttpMethod.Post,
+                    Content = JsonContent.Create {| aaa = "aaa" |}
+                )
+                |> client.SendAsync
+
+            Expect.equal "Status code should be BadRequest" HttpStatusCode.BadRequest response.StatusCode
+        }
+
+        testTask "Expired refresh token should return Unauthorized" {
+            let user = User.createUser()
+            do! user |> User.putInDatabase
+
+            let tokens = Api.Auth.Jwt.generateTokens user.Id user.Name
+            do! { tokens.RefreshTokenHash with
+                    Expiration = DateTimeOffset.MinValue }
+                |> User.putRefreshTokenHashInDb user
+
+            // Refresh
+            let! (response: HttpResponseMessage) =
+                createRefreshTokensReq
+                    client
+                    tokens.AccessToken
+                    tokens.RefreshToken.Token
+                |> client.SendAsync
+
+            Expect.equal "Status code should be Unauthorized" HttpStatusCode.Unauthorized response.StatusCode
+        }
+
+        testTask "Refresh with wrong refresh token should return Unauthorized" {
+            let user = User.createUser()
+            do! user |> User.putInDatabase
+
+            let tokens = Api.Auth.Jwt.generateTokens user.Id user.Name
+            do! tokens.RefreshTokenHash |> User.putRefreshTokenHashInDb user
+
+            // Refresh
+            let! (response: HttpResponseMessage) =
+                createRefreshTokensReq
+                    client
+                    tokens.AccessToken
+                    "fake refresh token"
+                |> client.SendAsync
+
+            Expect.equal "Status code should be Unauthorized" HttpStatusCode.Unauthorized response.StatusCode
+        }
+
+        testTask "Refresh with wrong access token should return Unauthorized" {
+            let user = User.createUser()
+            do! user |> User.putInDatabase
+
+            let tokens = Api.Auth.Jwt.generateTokens user.Id user.Name
+            do! tokens.RefreshTokenHash |> User.putRefreshTokenHashInDb user
+
+            // Refresh
+            let! (response: HttpResponseMessage) =
+                createRefreshTokensReq
+                    client
+                    "fake access token"
+                    tokens.RefreshToken.Token
+                |> client.SendAsync
+
+            Expect.equal "Status code should be Unauthorized" HttpStatusCode.Unauthorized response.StatusCode
+        }
+
+        testTask "Re-refresh with old refresh token should return Unauthorized" {
+            let user = User.createUser()
+            do! user |> User.putInDatabase
+
+            let tokens = Api.Auth.Jwt.generateTokens user.Id user.Name
+            do! tokens.RefreshTokenHash |> User.putRefreshTokenHashInDb user
+
+            // Refresh
+            let! (response: Api.Types.TokenPairDTO) =
+                createRefreshTokensReq
+                    client
+                    tokens.AccessToken
+                    tokens.RefreshToken.Token
+                |> client.SendAsync
+                |> Task.bind Serialization.decodeHttpResponse
+
+            // Refresh again
+            let! (response: HttpResponseMessage) =
+                createRefreshTokensReq
+                    client
+                    response.accessToken
+                    tokens.RefreshToken.Token
+                |> client.SendAsync
+
+            Expect.equal "Status code should be Unauthorized" HttpStatusCode.Unauthorized response.StatusCode
+        }
+    ]
 ]

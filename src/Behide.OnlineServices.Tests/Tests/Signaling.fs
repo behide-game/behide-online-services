@@ -54,7 +54,7 @@ let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
 
 [<Tests>]
 let signalingTests =
-    let testServer, offerStore, roomStore, playerConnStore = Common.createTestServer()
+    let testServer, stores = Common.createTestServer()
 
     testList "Signaling tests" [
         testTask "Signaling hub connection should success" {
@@ -64,7 +64,7 @@ let signalingTests =
 
             let connId = connection.ConnectionId |> ConnId.parse
             let playerConn =
-                playerConnStore.Get connId
+                stores.PlayerConnsStore.Get connId
                 |> Flip.Expect.wantSome "Client should be registered in the player connections store"
 
             Expect.equal playerConn.ConnectionId connId "Connection ID should be the same"
@@ -79,7 +79,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.wantOk "Room creation should success")
 
                 let room =
-                    roomStore.Get roomId
+                    stores.RoomStore.Get roomId
                     |> Flip.Expect.wantSome "Room should be created"
 
                 Expect.equal room.Id roomId "Room ID should be the same"
@@ -125,7 +125,7 @@ let signalingTests =
                     signalingHub1.CreateRoom()
                     |> Task.map (Flip.Expect.wantOk "Room creation should success")
 
-                roomStore.Get roomId
+                stores.RoomStore.Get roomId
                 |> Flip.Expect.isSome "Room should be created"
 
 
@@ -136,7 +136,7 @@ let signalingTests =
 
                 // Retrieve the updated room
                 let room =
-                    roomStore.Get roomId
+                    stores.RoomStore.Get roomId
                     |> Flip.Expect.wantSome "Room should still exist"
 
 
@@ -276,7 +276,7 @@ let signalingTests =
 
                 // Check connections
                 let room =
-                    roomStore.Get roomId
+                    stores.RoomStore.Get roomId
                     |> Flip.Expect.wantSome "Room should still exist"
 
                 let connId1 = conn1.ConnectionId |> ConnId.parse
@@ -363,7 +363,7 @@ let signalingTests =
 
                     // Check connections
                     let room =
-                        roomStore.Get roomId
+                        stores.RoomStore.Get roomId
                         |> Flip.Expect.wantSome "Room should still exist"
 
                     let connIdThatConnects =
@@ -448,7 +448,7 @@ let signalingTests =
 
                 // Check if the player is not in the room anymore
                 let room =
-                    roomStore.Get roomId
+                    stores.RoomStore.Get roomId
                     |> Flip.Expect.wantSome "Room should still exist"
 
                 Expect.sequenceEqual
@@ -493,7 +493,7 @@ let signalingTests =
 
                 // Check if the player is not in the room anymore
                 let room =
-                    roomStore.Get roomId
+                    stores.RoomStore.Get roomId
                     |> Flip.Expect.wantSome "Room should still exist"
 
                 Expect.sequenceEqual
@@ -530,7 +530,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.wantOk "Leaving room should success")
 
                 // Check if the room is removed
-                roomStore.Get roomId
+                stores.RoomStore.Get roomId
                 |> Flip.Expect.isNone "Room should be removed"
             }
         ]
@@ -546,7 +546,7 @@ let signalingTests =
 
                 // Check if the offer was created
                 let offer =
-                    offerStore.Get offerId
+                    stores.OfferStore.Get offerId
                     |> Flip.Expect.wantSome "Offer should be created"
 
                 Expect.equal
@@ -574,7 +574,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.wantOk "Connection attempt creation should success")
 
                 // Check if the offer has answerer (it should not)
-                offerStore.Get offerId
+                stores.OfferStore.Get offerId
                 |> Flip.Expect.wantSome "Offer should exist"
                 |> _.Answerer
                 |> Flip.Expect.isNone "Offer should be marked as not answered"
@@ -594,7 +594,7 @@ let signalingTests =
 
                 // Check if the offer is marked as answered
                 let offer =
-                    offerStore.Get offerId
+                    stores.OfferStore.Get offerId
                     |> Flip.Expect.wantSome "Offer should exist"
 
                 Expect.isSome offer.Answerer "Offer should has an answerer"
@@ -693,7 +693,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.isOk "Connection attempt ending should success")
 
                 // Check if the offer is removed
-                offerStore.Get offerId
+                stores.OfferStore.Get offerId
                 |> Flip.Expect.isNone "Offer should be removed"
             }
 
@@ -718,7 +718,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.isOk "Connection attempt ending should success")
 
                 // Check if the offer is removed
-                offerStore.Get offerId
+                stores.OfferStore.Get offerId
                 |> Flip.Expect.isNone "Offer should be removed"
             }
 
