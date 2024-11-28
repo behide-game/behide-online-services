@@ -323,7 +323,12 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                     |> Result.ofOption JoinRoomError.RoomNotFound
 
                 // Update room
-                let newPlayerId = (room.Players |> List.length) + 1
+                let newPlayerId =
+                    room.Players
+                    |> List.maxBy fst
+                    |> fst
+                    |> (+) 1
+
                 let newRoom =
                     { room with Players = (newPlayerId, playerConnId) :: room.Players }
 

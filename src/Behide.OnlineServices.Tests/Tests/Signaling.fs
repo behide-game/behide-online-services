@@ -189,6 +189,46 @@ let signalingTests =
                     Errors.JoinRoomError.RoomNotFound
                     "Nonexisting room joining should fail"
             }
+
+            testTask "Joining room should give a unique playerId" {
+                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub3: ISignalingHub) = testServer |> connectHub
+
+                // Initialization
+                let! roomId =
+                    signalingHub1.CreateRoom()
+                    |> Task.map (Flip.Expect.wantOk "Room creation should success")
+
+                let playerId1 = 1 // The first player should always have the playerId 1
+
+                // Join room
+                let! playerId2 =
+                    signalingHub2.JoinRoom roomId
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+
+                Expect.equal playerId2 2 "The second player should have the playerId to 2"
+                Expect.notEqual playerId1 playerId2 "The two players should have different playerId"
+
+                // Leave and rejoin room
+                do! signalingHub2.LeaveRoom()
+                    |> Task.map (Flip.Expect.wantOk "Leaving room should success")
+
+                let! playerId3 =
+                    signalingHub2.JoinRoom roomId
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+
+                Expect.equal playerId3 2 "The second player should have the playerId to 2"
+                Expect.notEqual playerId1 playerId3 "The two players should have different playerId"
+
+                // Join room with a third player
+                let! playerId4 =
+                    signalingHub3.JoinRoom roomId
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+
+                Expect.equal playerId4 3 "The third player should have the playerId to 3"
+                Expect.notEqual playerId1 playerId4 "The two players should have different playerId"
+            }
         ]
 
         testList "ConnectToRoomPlayers" [
