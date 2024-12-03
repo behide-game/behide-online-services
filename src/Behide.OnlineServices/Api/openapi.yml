@@ -1,0 +1,64 @@
+openapi: 3.0.0
+
+info:
+  title: Behide API
+  version: 1.0.0
+
+components:
+  schemas:
+    TokenPairDTO:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - refreshTokenExpiration
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        refreshTokenExpiration:
+          type: string
+          format: date-time
+
+paths:
+  /auth/refresh-token:
+    post:
+      summary: Refresh an access token
+      description: Refresh an access token by providing an access_token and a refresh token.
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPairDTO"
+        400:
+          description: Bad request
+          content:
+            application/text:
+              schema:
+                type: string
+              examples:
+                Invalid body:
+                  value: "Invalid body"
+        401:
+          description: Unauthorized
+          content:
+            application/text:
+              schema:
+                type: string
+              examples:
+                Invalid access token:
+                  value: Invalid access token
+                Invalid refresh token:
+                  value: Invalid refresh token
+        500:
+          description: Internal server error
+          content:
+            application/text:
+              schema:
+                type: "string"
+              examples:
+                Failed to update user tokens:
+                  value: "Failed to update user tokens"
