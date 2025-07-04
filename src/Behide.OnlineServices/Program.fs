@@ -22,7 +22,7 @@ let configureServices (services: IServiceCollection) =
     |> ignore
     services.AddSingleton<Signaling.IConnAttemptStore, Signaling.ConnAttemptStore>() |> ignore
     services.AddSingleton<Signaling.IRoomStore, Signaling.RoomStore>() |> ignore
-    services.AddSingleton<Signaling.IPlayerConnsStore, Signaling.PlayerConnsStore>() |> ignore
+    services.AddSingleton<Signaling.IPlayerInfoStore, Signaling.PlayerInfoStore>() |> ignore
 
 let appBuilder (app: IApplicationBuilder) =
     app.UseRouting() |> ignore

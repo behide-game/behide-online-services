@@ -79,14 +79,14 @@ type Room =
 
 /// Player state in the signaling process
 /// Only for the server to keep track of the player state
-type PlayerConnection =
+type PlayerInfo =
     { ConnectionId: ConnId
       ConnAttemptIds: ConnAttemptId list
       Room: RoomId option }
 
 
 /// The connection info of a player
-/// With it's peer id that represent his id in the room
+/// With its peer id that represent his id in the room
 /// And the connection attempt id to connect to the player
 /// Used when a player join a room and need to connect to the other players
 type PlayerConnectionInfo = { PeerId: int; ConnAttemptId: ConnAttemptId }
@@ -96,69 +96,62 @@ type RoomConnectionInfo =
 
 
 module Errors =
-    [<RequireQualifiedAccess>]
     type StartConnectionAttemptError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | FailedToCreateConnAttempt = 1
-        | FailedToUpdatePlayerConnection = 2
+        | FailedToUpdatePlayerInfo = 2
 
-    [<RequireQualifiedAccess>]
     type JoinConnectionAttemptError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | OfferNotFound = 1
         | OfferAlreadyAnswered = 2
-        | InitiatorCannotJoin = 3
+        | InitiatorCannotAnswer = 3
         | FailedToUpdateOffer = 4
 
-    [<RequireQualifiedAccess>]
     type SendAnswerError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | OfferNotFound = 1
         | NotAnswerer = 2
+        | FailedToTransmitAnswer = 3 // TODO: Test
 
-    [<RequireQualifiedAccess>]
     type SendIceCandidateError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | OfferNotFound = 1
         | NotAnswerer = 2
         | NotParticipant = 3
+        | FailedToTransmitCandidate = 4 // TODO: Test
 
-    [<RequireQualifiedAccess>]
     type EndConnectionAttemptError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | OfferNotFound = 1
         | NotParticipant = 2
         | FailedToRemoveOffer = 3
 
-    [<RequireQualifiedAccess>]
     type CreateRoomError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | PlayerAlreadyInARoom = 1
         | FailedToRegisterRoom = 2
-        | FailedToUpdatePlayerConnection = 3
+        | FailedToUpdatePlayerInfo = 3
 
-    [<RequireQualifiedAccess>]
     type JoinRoomError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | PlayerAlreadyInARoom = 1
         | RoomNotFound = 2
         | FailedToUpdateRoom = 3
-        | FailedToUpdatePlayerConnection = 4
+        | FailedToUpdatePlayerInfo = 4
 
-    [<RequireQualifiedAccess>]
     type ConnectToRoomPlayersError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | NotInARoom = 1
         | PlayerNotInRoomPlayers = 2
         | FailedToUpdateRoom = 3
 
-    [<RequireQualifiedAccess>]
     type LeaveRoomError =
-        | PlayerConnectionNotFound = 0
+        | PlayerInfoNotFound = 0
         | NotInARoom = 1
         | FailedToUpdateRoom = 2
         | FailedToRemoveRoom = 3
-        | FailedToUpdatePlayerConnection = 4
+        | FailedToUpdatePlayerInfo = 4
 
 open Errors
 
@@ -178,6 +171,6 @@ type ISignalingHub =
     abstract member LeaveRoom : unit -> Task<Result<unit, LeaveRoomError>>
 
 type ISignalingClient =
-    abstract member CreateConnAttempt : answererPeerId: int -> Task<ConnAttemptId option>
+    abstract member ConnectionRequested: applicantPeerId: int -> Task<ConnAttemptId | null>
     abstract member SdpAnswerReceived: ConnAttemptId -> SdpDescription -> Task
     abstract member IceCandidateReceived: ConnAttemptId -> IceCandidate -> Task

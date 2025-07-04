@@ -10,7 +10,7 @@ type IStore<'Id, 'Item> =
     abstract Remove: 'Id -> bool
     abstract Update: 'Id -> oldValue: 'Item -> newValue: 'Item -> bool
 
-type Store<'Id, 'Item>() =
+type Store<'Id, 'Item when 'Id: not null>() =
     let dict = new ConcurrentDictionary<'Id, 'Item>()
 
     interface IStore<'Id, 'Item> with

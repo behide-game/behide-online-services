@@ -10,7 +10,7 @@ open Behide.OnlineServices.Signaling
 let createTestServer () =
     let offerStore = new Hubs.Signaling.ConnAttemptStore()
     let roomStore = new Hubs.Signaling.RoomStore()
-    let playerConnsStore = new Hubs.Signaling.PlayerConnsStore()
+    let playerInfoStore = new Hubs.Signaling.PlayerInfoStore()
 
     let hostBuilder =
         WebHostBuilder()
@@ -19,11 +19,11 @@ let createTestServer () =
 
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IConnAttemptStore, Hubs.Signaling.ConnAttemptStore>()) |> ignore
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IRoomStore, Hubs.Signaling.RoomStore>()) |> ignore
-                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerConnsStore, Hubs.Signaling.PlayerConnsStore>()) |> ignore
+                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerInfoStore, Hubs.Signaling.PlayerInfoStore>()) |> ignore
 
                 services.AddSingleton<Hubs.Signaling.IConnAttemptStore>(offerStore) |> ignore
                 services.AddSingleton<Hubs.Signaling.IRoomStore>(roomStore) |> ignore
-                services.AddSingleton<Hubs.Signaling.IPlayerConnsStore>(playerConnsStore) |> ignore
+                services.AddSingleton<Hubs.Signaling.IPlayerInfoStore>(playerInfoStore) |> ignore
             )
             .Configure(fun app ->
                 app
@@ -34,7 +34,7 @@ let createTestServer () =
     new TestServer(hostBuilder),
     offerStore :> Store.IStore<_, _>,
     roomStore :> Store.IStore<_, _>,
-    playerConnsStore :> Store.IStore<_, _>
+    playerInfoStore :> Store.IStore<_, _>
 
 let fakeSdpDescription: SdpDescription =
     { ``type`` = "fake type"

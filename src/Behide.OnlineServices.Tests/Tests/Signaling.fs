@@ -54,7 +54,7 @@ let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
 
 [<Tests>]
 let signalingTests =
-    let testServer, offerStore, roomStore, playerConnStore = Common.createTestServer()
+    let testServer, offerStore, roomStore, playerInfoStore = Common.createTestServer()
 
     testList "Signaling tests" [
         testTask "Signaling hub connection should success" {
@@ -63,11 +63,11 @@ let signalingTests =
             Expect.equal connection.State HubConnectionState.Connected "Should be connected to the hub"
 
             let connId = connection.ConnectionId |> ConnId.parse
-            let playerConn =
-                playerConnStore.Get connId
+            let playerInfo =
+                playerInfoStore.Get connId
                 |> Flip.Expect.wantSome "Client should be registered in the player connections store"
 
-            Expect.equal playerConn.ConnectionId connId "Connection ID should be the same"
+            Expect.equal playerInfo.ConnectionId connId "Connection ID should be the same"
         }
 
         testList "CreateRoom" [
@@ -666,7 +666,7 @@ let signalingTests =
 
                 Expect.equal
                     error
-                    Errors.JoinConnectionAttemptError.InitiatorCannotJoin
+                    Errors.JoinConnectionAttemptError.InitiatorCannotAnswer
                     "Joining connection attempt as the initiator should fail"
             }
         ]
