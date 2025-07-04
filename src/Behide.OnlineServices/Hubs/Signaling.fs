@@ -10,11 +10,11 @@ open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 open Behide.OnlineServices.Signaling.Errors
 
+/// Store of player states in the signaling process
+type IPlayerConnStore = Store.IStore<ConnId, PlayerConnection>
+type PlayerConnStore = Store.Store<ConnId, PlayerConnection>
 
-
-type IPlayerConnsStore = Store.IStore<ConnId, PlayerConnection>
-type PlayerConnsStore = Store.Store<ConnId, PlayerConnection>
-
+/// WebRTC connection attempts store
 type IConnAttemptStore = Store.IStore<ConnAttemptId, ConnAttempt>
 type ConnAttemptStore = Store.Store<ConnAttemptId, ConnAttempt>
 
@@ -22,9 +22,9 @@ type IRoomStore = Store.IStore<RoomId, Room>
 type RoomStore = Store.Store<RoomId, Room>
 
 
-type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, playerConnsStore: IPlayerConnsStore) =
+type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, playerConnStore: IPlayerConnStore) =
     inherit Hub<ISignalingClient>()
-    // Should interface ISignalingHub, but it make the methods not callable from the client
+    // Should interface ISignalingHub, but it makes the methods not callable from the client
 
     // --- Player Connection Management ---
     override hub.OnConnectedAsync() =
@@ -36,7 +36,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                   ConnAttemptIds = []
                   Room = None }
 
-            do! playerConnsStore.Add
+            do! playerConnStore.Add
                     playerConnId
                     playerConn
                 |> Result.requireTrue "Failed to add player connection"
@@ -51,7 +51,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             let! playerConn =
                 playerConnId
-                |> playerConnsStore.Get
+                |> playerConnStore.Get
                 |> Result.ofOption "Player connection not found"
 
             // Remove player from room
@@ -84,7 +84,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             // Remove player connection
             let removePlayerConnectionError =
-                playerConnsStore.Remove playerConnId
+                playerConnStore.Remove playerConnId
                 |> Result.requireTrue "Failed to remove player connection"
                 |> function
                     | Ok _ -> None
@@ -112,7 +112,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             let! playerConn =
                 playerConnId
-                |> playerConnsStore.Get
+                |> playerConnStore.Get
                 |> Result.ofOption StartConnectionAttemptError.PlayerConnectionNotFound
 
             // Create connection attempt
@@ -131,7 +131,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let newPlayerConn =
                 { playerConn with ConnAttemptIds = connAttempt.Id :: playerConn.ConnAttemptIds }
 
-            do! playerConnsStore.Update
+            do! playerConnStore.Update
                     playerConnId
                     playerConn
                     newPlayerConn
@@ -140,15 +140,16 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             return connAttempt.Id
         }
 
+    /// Returns the offer sdp desc and allow to send the answer
     member hub.JoinConnectionAttempt (connAttemptId: ConnAttemptId) =
         taskResult {
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
             // Check if client has a player connection
-            let! _playerConn =
-                connId
-                |> playerConnsStore.Get
+            do! connId
+                |> playerConnStore.Get
                 |> Result.ofOption JoinConnectionAttemptError.PlayerConnectionNotFound
+                |> Result.ignore
 
             // Retrieve connection attempt
             let! connAttempt =
@@ -178,10 +179,11 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
         taskResult {
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
-            let! _playerConn = // Check if client has a player connection
-                connId
-                |> playerConnsStore.Get
+            // Check if client has a player connection
+            do! connId
+                |> playerConnStore.Get
                 |> Result.ofOption SendAnswerError.PlayerConnectionNotFound
+                |> Result.ignore
 
             // Retrieve connection attempt
             let! connAttempt =
@@ -190,16 +192,15 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 |> Result.ofOption SendAnswerError.OfferNotFound
 
             // Get answerer
-            let! answerer =
-                connAttempt.Answerer
-                |> Result.ofOption SendAnswerError.NotAnswerer
-
+            let! answerer = connAttempt.Answerer |> Result.ofOption SendAnswerError.NotAnswerer
             // Check if the client is the answerer
-            do! connId = answerer
-                |> Result.requireTrue SendAnswerError.NotAnswerer
+            do! connId = answerer |> Result.requireTrue SendAnswerError.NotAnswerer
 
             // Send answer to initiator
-            do! hub.Clients.Client(connAttempt.InitiatorConnectionId |> ConnId.raw).SdpAnswerReceived connAttemptId sdpDescription
+            try
+                do! hub.Clients.Client(connAttempt.InitiatorConnectionId |> ConnId.raw).SdpAnswerReceived connAttemptId sdpDescription
+            with _ ->
+                return! Error SendAnswerError.FailedToTransmitAnswer
         }
 
     member hub.SendIceCandidate (connAttemptId: ConnAttemptId) (iceCandidate: IceCandidate) =
@@ -207,10 +208,10 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
             // Check if client has a player connection
-            let! _playerConn =
-                connId
-                |> playerConnsStore.Get
+            do! connId
+                |> playerConnStore.Get
                 |> Result.ofOption SendIceCandidateError.PlayerConnectionNotFound
+                |> Result.ignore
 
             let! connAttempt =
                 connAttemptId
@@ -232,7 +233,10 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 | false -> answerer
 
             // Send ice candidate to other peer
-            do! hub.Clients.Client(targetConnId |> ConnId.raw).IceCandidateReceived connAttemptId iceCandidate
+            try
+                do! hub.Clients.Client(targetConnId |> ConnId.raw).IceCandidateReceived connAttemptId iceCandidate
+            with _ ->
+                return! Error SendIceCandidateError.FailedToTransmitCandidate
         }
 
     member hub.EndConnectionAttempt (connAttemptId: ConnAttemptId) =
@@ -240,10 +244,10 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let connId = hub.Context.ConnectionId |> ConnId.parse
 
             // Check if client has a player connection
-            let! _playerConn =
-                connId
-                |> playerConnsStore.Get
+            do! connId
+                |> playerConnStore.Get
                 |> Result.ofOption EndConnectionAttemptError.PlayerConnectionNotFound
+                |> Result.ignore
 
             let! connAttempt =
                 connAttemptId
@@ -270,13 +274,11 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             let! playerConn =
                 playerConnId
-                |> playerConnsStore.Get
+                |> playerConnStore.Get
                 |> Result.ofOption CreateRoomError.PlayerConnectionNotFound
 
             // Check if player is already in a room
-            do! playerConn.Room
-                |> Result.requireNone CreateRoomError.PlayerAlreadyInARoom
-
+            do! playerConn.Room |> Result.requireNone CreateRoomError.PlayerAlreadyInARoom
 
             // Create room
             let room =
@@ -291,10 +293,9 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 |> Result.requireTrue CreateRoomError.FailedToRegisterRoom
 
             // Update player connection
-            let newPlayerConn =
-                { playerConn with Room = Some room.Id }
+            let newPlayerConn = { playerConn with Room = Some room.Id }
 
-            do! playerConnsStore.Update
+            do! playerConnStore.Update
                     playerConnId
                     playerConn
                     newPlayerConn
@@ -309,28 +310,28 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             let! playerConn =
                 playerConnId
-                |> playerConnsStore.Get
+                |> playerConnStore.Get
                 |> Result.ofOption JoinRoomError.PlayerConnectionNotFound
 
             // Check if player is already in a room
             do! playerConn.Room
                 |> Result.requireNone JoinRoomError.PlayerAlreadyInARoom
 
-            let! newPlayerId = lock roomStore (fun _ -> taskResult {
+            // Update room
+            let! newPeerId = lock roomStore (fun () -> taskResult {
                 let! room =
                     roomId
                     |> roomStore.Get
                     |> Result.ofOption JoinRoomError.RoomNotFound
 
                 // Update room
-                let newPlayerId =
+                let newPeerId =
                     room.Players
                     |> List.maxBy fst
                     |> fst
                     |> (+) 1
 
-                let newRoom =
-                    { room with Players = (newPlayerId, playerConnId) :: room.Players }
+                let newRoom = { room with Players = (newPeerId, playerConnId) :: room.Players }
 
                 do! roomStore.Update
                         roomId
@@ -338,20 +339,19 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                         newRoom
                     |> Result.requireTrue JoinRoomError.FailedToUpdateRoom
 
-                return newPlayerId
+                return newPeerId
             })
 
             // Update player connection
-            let newPlayerConn =
-                { playerConn with Room = Some roomId }
+            let newPlayerConn = { playerConn with Room = Some roomId }
 
-            do! playerConnsStore.Update
+            do! playerConnStore.Update
                     playerConnId
                     playerConn
                     newPlayerConn
                 |> Result.requireTrue JoinRoomError.FailedToUpdatePlayerConnection
 
-            return newPlayerId
+            return newPeerId
         }
 
     member hub.ConnectToRoomPlayers() =
@@ -360,7 +360,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             let! playerConn =
                 playerConnId
-                |> playerConnsStore.Get
+                |> playerConnStore.Get
                 |> Result.ofOption ConnectToRoomPlayersError.PlayerConnectionNotFound
 
             return! lock roomStore (fun _ -> taskResult {
@@ -376,24 +376,27 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                     |> Result.map fst
 
 
-                /// Create connection attempt on the requested client and return the ConnAttemptId with a "connection" to add in the room
-                let createConnAttemptForPlayer (peerId, connId) =
-                    task {
-                        let cts = new CancellationTokenSource(5000)
-                        try
-                            cts.Token.ThrowIfCancellationRequested()
-                            let! r = hub.Clients.Client(connId |> ConnId.raw).CreateConnAttempt(requestingPlayerId)
+                /// Create connection attempt on the requested client
+                let createConnAttemptForPlayer (targetPeerId, targetConnId) =
+                    taskResult {
+                        let! r =
+                            targetConnId
+                            |> ConnId.raw
+                            |> hub.Clients.Client
+                            |> _.ConnectionRequested(requestingPlayerId)
+                            |> Task.catch
+                            |> Task.map (function // Handle the case where the client didn't register a handler
+                                | Choice1Of2 r -> Ok r
+                                | Choice2Of2 _ -> Error targetPeerId
+                            )
 
-                            match r with
-                            | None -> return Error peerId
-                            | Some connAttemptId ->
-                                let connInfo = { PeerId = peerId; ConnAttemptId = connAttemptId }
-                                let connection = playerConnId, connId
+                        match r with
+                        | null -> return! Error targetPeerId
+                        | connAttemptId ->
+                            let connInfo = { PeerId = targetPeerId; ConnAttemptId = connAttemptId }
+                            let connection = playerConnId, targetConnId
 
-                                return Ok (connInfo, connection)
-
-                        with // Handle the case where the client didn't registered an handler
-                        | _ -> return Error peerId
+                            return connInfo, connection
                     }
 
                 let alreadyConnectedPlayers =
@@ -411,17 +414,16 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                         let isRequestingPlayer = connId <> playerConnId
                         let alreadyConnected = alreadyConnectedPlayers |> List.contains connId |> not
 
-                        // Don't connect the player to himself
-                        // And don't reconnect player
+                        // Don't connect the player to himself and don't reconnect player
                         match isRequestingPlayer && alreadyConnected with
                         | false -> None
-                        | true -> (connInfo, connId) |> createConnAttemptForPlayer |> Some
+                        | true -> createConnAttemptForPlayer(connInfo, connId) |> Some
                     )
                     |> Task.WhenAll
 
                 let mutable playersConnInfo = []
-                let mutable newConnections = []
                 let mutable failed = []
+                let mutable newConnections = []
 
                 playersConnectionInfoResults |> Array.iter (
                     function
@@ -451,7 +453,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             // Check if a player connection exists
             let! playerConn =
                 playerConnId
-                |> playerConnsStore.Get
+                |> playerConnStore.Get
                 |> Result.ofOption LeaveRoomError.PlayerConnectionNotFound
 
             do! lock roomStore (fun _ -> taskResult {
@@ -487,7 +489,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             })
 
             // Update player connection
-            do! playerConnsStore.Update
+            do! playerConnStore.Update
                     playerConnId
                     playerConn
                     { playerConn with Room = None }

@@ -41,7 +41,7 @@ let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
     let url = testServer.BaseAddress.ToString() + "webrtc-signaling"
 
     let connection =
-        (new HubConnectionBuilder())
+        HubConnectionBuilder()
             .WithUrl(url, httpConnectionOptions)
             .AddJsonProtocol(setupJsonProtocol)
             .Build()
@@ -110,7 +110,7 @@ let signalingTests =
                 let mutable offerId = None
 
                 // Add handler for creating offer
-                conn1.On<int, ConnAttemptId>("CreateConnAttempt", fun _playerId ->
+                conn1.On<int, ConnAttemptId>("ConnectionRequested", fun _playerId ->
                     Common.fakeSdpDescription
                     |> signalingHub1.StartConnectionAttempt
                     |> Task.map (function
@@ -249,10 +249,10 @@ let signalingTests =
 
                 Expect.equal secondPlayerId 2 "The second player should have a playerId/peerId to 2"
 
-                // Register "CreateConnAttempt" handler on first player
+                // Register "ConnectionRequested" handler on first player
                 let mutable connAttemptId = None
 
-                conn1.On<int, ConnAttemptId>("CreateConnAttempt", fun _playerId ->
+                conn1.On<int, ConnAttemptId>("ConnectionRequested", fun _playerId ->
                     Common.fakeSdpDescription
                     |> signalingHub1.StartConnectionAttempt
                     |> Task.map (function
@@ -305,16 +305,14 @@ let signalingTests =
                         players
                         |> List.indexed
                         |> List.choose (fun (idx, (conn, hub)) ->
-                            let connAttemptIdTcs = new TaskCompletionSource<Result<ConnAttemptId, _>>()
+                            let connAttemptIdTcs = TaskCompletionSource<Result<ConnAttemptId, _>>()
                             cts.Token.Register(fun _ -> connAttemptIdTcs.TrySetCanceled() |> ignore) |> ignore
 
-                            conn.On<int, ConnAttemptId>("CreateConnAttempt", fun _ ->
+                            conn.On<int, ConnAttemptId>("ConnectionRequested", fun _ ->
                                 Common.fakeSdpDescription
                                 |> hub.StartConnectionAttempt
                                 |> Task.map (fun res ->
-                                    res
-                                    |> connAttemptIdTcs.SetResult
-                                    |> ignore
+                                    connAttemptIdTcs.SetResult(res)
 
                                     match res with
                                     | Ok c -> c
@@ -389,7 +387,7 @@ let signalingTests =
                         "Room should contain the all the new connections"
                 }
 
-            testTask "Connect to players without a CreateConnAttempt handler" {
+            testTask "Connect to players without a ConnectionRequested handler" {
                 let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
                 let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
 
@@ -407,7 +405,7 @@ let signalingTests =
                 Expect.sequenceEqual
                     res.FailedCreations
                     [ 1 ] // 1 is the peerId of the first player, the one who created the room
-                    "Joining room without add handler for CreateConnAttempt should fail"
+                    "Joining room without add handler for ConnectionRequested should fail"
 
                 Expect.isEmpty res.PlayersConnInfo "No connection info should be returned"
             }
@@ -475,7 +473,7 @@ let signalingTests =
                     |> Task.map (Flip.Expect.isOk "Room joining should success")
 
                 // Connect to room players
-                conn1.On<int, ConnAttemptId>("CreateConnAttempt", fun _playerId ->
+                conn1.On<int, ConnAttemptId>("ConnectionRequested", fun _playerId ->
                     Common.fakeSdpDescription
                     |> signalingHub1.StartConnectionAttempt
                     |> Task.map (function

@@ -1,40 +1,44 @@
 module Behide.OnlineServices.Tests.Common
 
+open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Falco.Extensions
 
 open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 
 let createTestServer () =
-    let offerStore = new Hubs.Signaling.ConnAttemptStore()
-    let roomStore = new Hubs.Signaling.RoomStore()
-    let playerConnsStore = new Hubs.Signaling.PlayerConnsStore()
+    let offerStore = Hubs.Signaling.ConnAttemptStore()
+    let roomStore = Hubs.Signaling.RoomStore()
+    let playerConnStore = Hubs.Signaling.PlayerConnStore()
 
     let hostBuilder =
         WebHostBuilder()
             .ConfigureServices(fun services ->
-                services |> Program.configureServices
+                services |> Program.configureServices |> ignore
 
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IConnAttemptStore, Hubs.Signaling.ConnAttemptStore>()) |> ignore
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IRoomStore, Hubs.Signaling.RoomStore>()) |> ignore
-                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerConnsStore, Hubs.Signaling.PlayerConnsStore>()) |> ignore
+                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerConnStore, Hubs.Signaling.PlayerConnStore>()) |> ignore
 
                 services.AddSingleton<Hubs.Signaling.IConnAttemptStore>(offerStore) |> ignore
                 services.AddSingleton<Hubs.Signaling.IRoomStore>(roomStore) |> ignore
-                services.AddSingleton<Hubs.Signaling.IPlayerConnsStore>(playerConnsStore) |> ignore
+                services.AddSingleton<Hubs.Signaling.IPlayerConnStore>(playerConnStore) |> ignore
             )
             .Configure(fun app ->
-                app
-                |> Program.appBuilder
-                |> ignore
+                app.UseRouting()
+                    .UseEndpoints(fun endpoints ->
+                        endpoints.MapHub<Behide.OnlineServices.Hubs.Signaling.SignalingHub>("/webrtc-signaling") |> ignore
+                    )
+                    .UseFalco(Program.appEndpoints) |> ignore
             )
 
     new TestServer(hostBuilder),
     offerStore :> Store.IStore<_, _>,
     roomStore :> Store.IStore<_, _>,
-    playerConnsStore :> Store.IStore<_, _>
+    playerConnStore :> Store.IStore<_, _>
 
 let fakeSdpDescription: SdpDescription =
     { ``type`` = "fake type"
@@ -54,5 +58,5 @@ type TimedTaskCompletionSource<'A>(timeout: int) =
         |> ignore
 
     member _.Task = tcs.Task
-    member _.SetResult(result) = tcs.SetResult(result) |> ignore
-    member _.SetException(ex: exn) = tcs.SetException(ex) |> ignore
+    member _.SetResult(result) = tcs.SetResult(result)
+    member _.SetException(ex: exn) = tcs.SetException(ex)
