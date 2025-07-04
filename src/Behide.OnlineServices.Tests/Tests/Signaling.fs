@@ -666,7 +666,7 @@ let signalingTests =
 
                 Expect.equal
                     error
-                    Errors.JoinConnectionAttemptError.InitiatorCannotAnswer
+                    Errors.JoinConnectionAttemptError.InitiatorCannotJoin
                     "Joining connection attempt as the initiator should fail"
             }
         ]

@@ -105,7 +105,7 @@ module Errors =
         | PlayerInfoNotFound = 0
         | OfferNotFound = 1
         | OfferAlreadyAnswered = 2
-        | InitiatorCannotAnswer = 3
+        | InitiatorCannotJoin = 3
         | FailedToUpdateOffer = 4
 
     type SendAnswerError =

@@ -164,7 +164,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
 
             // Check if the answerer is not the initiator
             do! connAttempt.InitiatorConnectionId <> connId
-                |> Result.requireTrue JoinConnectionAttemptError.InitiatorCannotAnswer
+                |> Result.requireTrue JoinConnectionAttemptError.InitiatorCannotJoin
 
             // Update connection attempt
             do! connAttemptStore.Update
