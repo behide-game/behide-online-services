@@ -41,7 +41,7 @@ let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
     let url = testServer.BaseAddress.ToString() + "webrtc-signaling"
 
     let connection =
-        (new HubConnectionBuilder())
+        HubConnectionBuilder()
             .WithUrl(url, httpConnectionOptions)
             .AddJsonProtocol(setupJsonProtocol)
             .Build()
@@ -132,7 +132,7 @@ let signalingTests =
                 // Join the room
                 let! playerId =
                     signalingHub2.JoinRoom roomId
-                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success" >> fst)
 
                 // Retrieve the updated room
                 let room =
@@ -205,7 +205,7 @@ let signalingTests =
                 // Join room
                 let! playerId2 =
                     signalingHub2.JoinRoom roomId
-                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success" >> fst)
 
                 Expect.equal playerId2 2 "The second player should have the playerId to 2"
                 Expect.notEqual playerId1 playerId2 "The two players should have different playerId"
@@ -216,7 +216,7 @@ let signalingTests =
 
                 let! playerId3 =
                     signalingHub2.JoinRoom roomId
-                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success" >> fst)
 
                 Expect.equal playerId3 2 "The second player should have the playerId to 2"
                 Expect.notEqual playerId1 playerId3 "The two players should have different playerId"
@@ -224,7 +224,7 @@ let signalingTests =
                 // Join room with a third player
                 let! playerId4 =
                     signalingHub3.JoinRoom roomId
-                    |> Task.map (Flip.Expect.wantOk "Room joining should success")
+                    |> Task.map (Flip.Expect.wantOk "Room joining should success" >> fst)
 
                 Expect.equal playerId4 3 "The third player should have the playerId to 3"
                 Expect.notEqual playerId1 playerId4 "The two players should have different playerId"
@@ -245,7 +245,7 @@ let signalingTests =
 
                 let! secondPlayerId =
                     signalingHub2.JoinRoom roomId
-                    |> Task.map (Flip.Expect.wantOk "Failed to join room")
+                    |> Task.map (Flip.Expect.wantOk "Failed to join room" >> fst)
 
                 Expect.equal secondPlayerId 2 "The second player should have a playerId/peerId to 2"
 
@@ -305,16 +305,14 @@ let signalingTests =
                         players
                         |> List.indexed
                         |> List.choose (fun (idx, (conn, hub)) ->
-                            let connAttemptIdTcs = new TaskCompletionSource<Result<ConnAttemptId, _>>()
+                            let connAttemptIdTcs = TaskCompletionSource<Result<ConnAttemptId, _>>()
                             cts.Token.Register(fun _ -> connAttemptIdTcs.TrySetCanceled() |> ignore) |> ignore
 
                             conn.On<int, ConnAttemptId>("CreateConnAttempt", fun _ ->
                                 Common.fakeSdpDescription
                                 |> hub.StartConnectionAttempt
                                 |> Task.map (fun res ->
-                                    res
-                                    |> connAttemptIdTcs.SetResult
-                                    |> ignore
+                                    connAttemptIdTcs.SetResult(res)
 
                                     match res with
                                     | Ok c -> c

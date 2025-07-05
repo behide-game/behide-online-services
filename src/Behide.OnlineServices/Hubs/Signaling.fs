@@ -322,21 +322,21 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                 |> Result.requireNone JoinRoomError.PlayerAlreadyInARoom
 
             // Update room
-            let! newPlayerId = lock roomStore (fun () -> taskResult {
+            let! newPeerId, playerCount = lock roomStore (fun () -> taskResult {
                 let! room =
                     roomId
                     |> roomStore.Get
                     |> Result.ofOption JoinRoomError.RoomNotFound
 
                 // Update room
-                let newPlayerId =
+                let newPeerId =
                     room.Players
                     |> List.maxBy fst
                     |> fst
                     |> (+) 1
 
                 let newRoom =
-                    { room with Players = (newPlayerId, playerInfoId) :: room.Players }
+                    { room with Players = (newPeerId, playerInfoId) :: room.Players }
 
                 do! roomStore.Update
                         roomId
@@ -344,7 +344,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                         newRoom
                     |> Result.requireTrue JoinRoomError.FailedToUpdateRoom
 
-                return newPlayerId
+                return newPeerId, newRoom.Players.Length
             })
 
             // Update player connection
@@ -356,7 +356,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
                     newPlayerInfo
                 |> Result.requireTrue JoinRoomError.FailedToUpdatePlayerInfo
 
-            return newPlayerId
+            return newPeerId, playerCount // TODO: Add testes for player count
         }
 
     member hub.ConnectToRoomPlayers() =

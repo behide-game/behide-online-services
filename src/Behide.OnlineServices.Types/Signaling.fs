@@ -166,7 +166,7 @@ type ISignalingHub =
 
     abstract member CreateRoom : unit -> Task<Result<RoomId, CreateRoomError>>
     /// Return the peerId of the player in the room
-    abstract member JoinRoom : RoomId -> Task<Result<int, JoinRoomError>>
+    abstract member JoinRoom : RoomId -> Task<Result<int * int, JoinRoomError>>
     abstract member ConnectToRoomPlayers : unit -> Task<Result<RoomConnectionInfo, ConnectToRoomPlayersError>>
     abstract member LeaveRoom : unit -> Task<Result<unit, LeaveRoomError>>
 

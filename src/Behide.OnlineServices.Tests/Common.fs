@@ -8,14 +8,14 @@ open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 
 let createTestServer () =
-    let offerStore = new Hubs.Signaling.ConnAttemptStore()
-    let roomStore = new Hubs.Signaling.RoomStore()
-    let playerInfoStore = new Hubs.Signaling.PlayerInfoStore()
+    let offerStore = Hubs.Signaling.ConnAttemptStore()
+    let roomStore = Hubs.Signaling.RoomStore()
+    let playerInfoStore = Hubs.Signaling.PlayerInfoStore()
 
     let hostBuilder =
         WebHostBuilder()
             .ConfigureServices(fun services ->
-                services |> Program.configureServices
+                services |> Program.configureServices |> ignore
 
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IConnAttemptStore, Hubs.Signaling.ConnAttemptStore>()) |> ignore
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IRoomStore, Hubs.Signaling.RoomStore>()) |> ignore
