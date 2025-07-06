@@ -18,7 +18,7 @@ jobs:
         run: dotnet build
 
       - name: Perform tests
-        run: dotnet run --no-build --project src/Behide.OnlineServices.Tests --fail-on-focused-tests --nunit-summary TestResults.xml
+        run: dotnet run --no-build --project src/Behide.OnlineServices.Tests --fail-on-focused-tests --junit-summary TestResults.xml
 
       - name: Upload dotnet test results
         uses: actions/upload-artifact@v4
