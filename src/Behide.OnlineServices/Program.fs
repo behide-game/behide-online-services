@@ -20,7 +20,7 @@ let configureServices (services: IServiceCollection) =
     |> ignore
     services.AddSingleton<Signaling.IConnAttemptStore, Signaling.ConnAttemptStore>() |> ignore
     services.AddSingleton<Signaling.IRoomStore, Signaling.RoomStore>() |> ignore
-    services.AddSingleton<Signaling.IPlayerConnStore, Signaling.PlayerConnStore>() |> ignore
+    services.AddSingleton<Signaling.IPlayerConnectionStore, Signaling.PlayerConnectionStore>() |> ignore
     services
 
 let appEndpoints =

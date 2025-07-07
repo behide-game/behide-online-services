@@ -1,6 +1,7 @@
 namespace Behide.OnlineServices.Signaling
 
 open System
+open System.Collections.Generic
 open System.Threading.Tasks
 
 type SdpDescription =
@@ -71,9 +72,11 @@ type Room =
     { Id: RoomId
       Initiator: ConnId
       /// Contains the initiator
-      Players: (int * ConnId) list
-      /// A list of the connections between the peers
-      Connections: (ConnId * ConnId) list }
+      Players: Dictionary<ConnId, int>
+      /// A list of the connections between the peers (in the tuple, the first is always the lowest peerId)
+      Connections: HashSet<ConnId * ConnId>
+      ConnectionsInProgress: HashSet<ConnId * ConnId>
+      Semaphore: System.Threading.SemaphoreSlim }
 
 
 

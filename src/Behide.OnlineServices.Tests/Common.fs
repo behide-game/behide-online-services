@@ -10,9 +10,9 @@ open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 
 let createTestServer () =
-    let offerStore = Hubs.Signaling.ConnAttemptStore()
+    let connectionAttemptStore = Hubs.Signaling.ConnAttemptStore()
     let roomStore = Hubs.Signaling.RoomStore()
-    let playerConnStore = Hubs.Signaling.PlayerConnStore()
+    let playerConnStore = Hubs.Signaling.PlayerConnectionStore()
 
     let hostBuilder =
         WebHostBuilder()
@@ -21,11 +21,11 @@ let createTestServer () =
 
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IConnAttemptStore, Hubs.Signaling.ConnAttemptStore>()) |> ignore
                 services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IRoomStore, Hubs.Signaling.RoomStore>()) |> ignore
-                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerConnStore, Hubs.Signaling.PlayerConnStore>()) |> ignore
+                services.Remove(ServiceDescriptor.Singleton<Hubs.Signaling.IPlayerConnectionStore, Hubs.Signaling.PlayerConnectionStore>()) |> ignore
 
-                services.AddSingleton<Hubs.Signaling.IConnAttemptStore>(offerStore) |> ignore
+                services.AddSingleton<Hubs.Signaling.IConnAttemptStore>(connectionAttemptStore) |> ignore
                 services.AddSingleton<Hubs.Signaling.IRoomStore>(roomStore) |> ignore
-                services.AddSingleton<Hubs.Signaling.IPlayerConnStore>(playerConnStore) |> ignore
+                services.AddSingleton<Hubs.Signaling.IPlayerConnectionStore>(playerConnStore) |> ignore
             )
             .Configure(fun app ->
                 app.UseRouting()
@@ -36,7 +36,7 @@ let createTestServer () =
             )
 
     new TestServer(hostBuilder),
-    offerStore :> Store.IStore<_, _>,
+    connectionAttemptStore :> Store.IStore<_, _>,
     roomStore :> Store.IStore<_, _>,
     playerConnStore :> Store.IStore<_, _>
 

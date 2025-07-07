@@ -9,7 +9,11 @@
     <ProjectReference Include="../Behide.OnlineServices/Behide.OnlineServices.fsproj" />
 
     <Compile Include="Common.fs" />
-    <Compile Include="Tests/Signaling.fs" />
+
+    <Compile Include="Tests\Signaling\Common.fs" />
+    <Compile Include="Tests\Signaling\RoomManagement.fs" />
+    <Compile Include="Tests\Signaling\WebRTCSignaling.fs" />
+    <Compile Include="Tests\Signaling\Signaling.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
