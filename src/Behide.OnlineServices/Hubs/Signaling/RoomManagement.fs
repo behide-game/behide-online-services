@@ -47,7 +47,7 @@ let createRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: 
         return room.Id
     }
 
-let joinRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) (roomId: RoomId) = // TODO: Add concurrency test
+let joinRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) (roomId: RoomId) =
     taskResult {
         let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 

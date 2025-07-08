@@ -19,7 +19,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
     testList "RoomManagement" [
         testList "CreateRoom" [
             testTask "Create room should success" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let! roomId =
                     signalingHub.CreateRoom()
@@ -33,7 +33,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Create room while already in a room" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 do! signalingHub.CreateRoom()
                     |> Task.map (Flip.Expect.isOk "Room creation should success")
@@ -51,8 +51,8 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
         testList "JoinRoom" [
             testTask "Join room should success" {
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (conn2: HubConnection, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (conn2: HubConnection, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 let mutable offerId = None
 
@@ -104,7 +104,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Join room while already in a room" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let! roomId =
                     signalingHub.CreateRoom()
@@ -122,7 +122,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Join nonexisting room" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let fakeRoomId = RoomId.create()
 
@@ -138,9 +138,9 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Joining room should give a unique peerId" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub3: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub3: SignalingHub) = testServer |> connectHub
 
                 // Initialization
                 let! roomId =
@@ -176,19 +176,64 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                 Expect.equal peerId4 3 "The third player should have the peerId to 3"
                 Expect.notEqual peerId1 peerId4 "The two players should have different peerId"
             }
+
+            testTheoryTask
+                "Simultaneously joining room should give unique peerIds"
+                [ 3; 5; 10; 100 ]
+                (fun nbOfPlayers -> task {
+                    let! roomCreator = testServer |> connectHub |> Task.map snd
+                    let! joiningPlayers =
+                        List.init nbOfPlayers (fun _ -> testServer |> connectHub |> Task.map snd)
+                        |> Task.WhenAll
+
+                    // Create room
+                    let! roomId = roomCreator.CreateRoom() |> Task.map (Flip.Expect.wantOk "Room creation should success")
+
+                    // Join room
+                    let cts = new CancellationTokenSource(TimeSpan.FromSeconds 20.)
+                    let peerIds = ConcurrentBag([ roomCreator.PlayerId, 1 ])
+
+                    do! Parallel.ForEachAsync(
+                        joiningPlayers,
+                        ParallelOptions(
+                            MaxDegreeOfParallelism = nbOfPlayers,
+                            CancellationToken = cts.Token
+                        ),
+                        Func<SignalingHub, _, _>(fun player ct ->
+                            player.JoinRoom(roomId)
+                            |> Task.map (Flip.Expect.wantOk "Should be able to join the room")
+                            |> Task.map (fun peerId -> peerIds.Add (player.PlayerId, peerId))
+                            |> ValueTask
+                        )
+                    )
+
+                    // Check
+                    Expect.hasLength peerIds (nbOfPlayers + 1) "All players should have a peer id"
+
+                    let distinctPeerIds = peerIds |> Array.ofSeq |> Array.distinct
+                    Expect.hasLength distinctPeerIds peerIds.Count "Peer ids should all be unique"
+
+                    let room = roomStore.Get roomId |> Flip.Expect.wantSome "Room should still exist"
+                    let roomPeerIds =
+                        room.Players
+                        |> Array.ofSeq
+                        |> Array.map _.Deconstruct()
+
+                    Expect.containsAll roomPeerIds distinctPeerIds "Room should have assigned the peer ids to the correct players"
+                })
         ]
 
         testList "ConnectToRoomPlayers" [
             testTask "Connect to room players" {
                 // Create room
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
 
                 let! roomId =
                     signalingHub1.CreateRoom()
                     |> Task.map (Flip.Expect.wantOk "Failed to create a room")
 
                 // Join room
-                let! (conn2: HubConnection, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (conn2: HubConnection, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 let! secondPeerId =
                     signalingHub2.JoinRoom roomId
@@ -455,8 +500,8 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                 }
 
             testTask "Connect to players without a ConnectionRequested handler" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 let! roomId =
                     signalingHub1.CreateRoom()
@@ -478,8 +523,8 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Connect to players with a blocking ConnectionRequested handler" {
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 // Create room
                 let! roomId =
@@ -510,7 +555,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Connect to players while not in a room" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let! (error: Errors.ConnectToRoomPlayersError) =
                     signalingHub.ConnectToRoomPlayers()
@@ -526,14 +571,14 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
         testList "LeaveRoom" [
             testTask "Leave room" {
                 // Create room
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
 
                 let! roomId =
                     signalingHub1.CreateRoom()
                     |> Task.map (Flip.Expect.wantOk "Room creation should success")
 
                 // Join room
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 do! roomId
                     |> signalingHub2.JoinRoom
@@ -558,14 +603,14 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
             testTask "Leave room where we are connected to players" {
                 // Create room
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
 
                 let! roomId =
                     signalingHub1.CreateRoom()
                     |> Task.map (Flip.Expect.wantOk "Room creation should success")
 
                 // Join room
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 do! roomId
                     |> signalingHub2.JoinRoom
@@ -602,7 +647,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Leave room while not in a room" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let! (error: Errors.LeaveRoomError) =
                     signalingHub.LeaveRoom()
@@ -615,7 +660,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
             }
 
             testTask "Leave room while being the last player delete the room" {
-                let! (_, hub1: ISignalingHub) = testServer |> connectHub
+                let! (_, hub1: SignalingHub) = testServer |> connectHub
 
                 // Create room
                 let! roomId =

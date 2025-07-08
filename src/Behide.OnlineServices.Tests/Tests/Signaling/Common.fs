@@ -19,13 +19,26 @@ type SignalingHub(connection: HubConnection) =
         member _.SendIceCandidate       offerId iceCandidate = connection.InvokeAsync<_>("SendIceCandidate",       offerId, iceCandidate)
         member _.EndConnectionAttempt   offerId              = connection.InvokeAsync<_>("EndConnectionAttempt",   offerId)
 
-        member _.CreateRoom   () = connection.InvokeAsync<_>("CreateRoom")
+        member _.CreateRoom()    = connection.InvokeAsync<_>("CreateRoom")
         member _.JoinRoom roomId = connection.InvokeAsync<_>("JoinRoom", roomId)
-        member _.LeaveRoom    () = connection.InvokeAsync<_>("LeaveRoom")
+        member _.LeaveRoom()     = connection.InvokeAsync<_>("LeaveRoom")
         member _.ConnectToRoomPlayers() = connection.InvokeAsync<_>("ConnectToRoomPlayers")
 
+    member this.StartConnectionAttempt sdpDescription       = (this :> ISignalingHub).StartConnectionAttempt sdpDescription
+    member this.JoinConnectionAttempt  offerId              = (this :> ISignalingHub).JoinConnectionAttempt  offerId
+    member this.SendAnswer             offerId iceCandidate = (this :> ISignalingHub).SendAnswer             offerId iceCandidate
+    member this.SendIceCandidate       offerId iceCandidate = (this :> ISignalingHub).SendIceCandidate       offerId iceCandidate
+    member this.EndConnectionAttempt   offerId              = (this :> ISignalingHub).EndConnectionAttempt   offerId
 
-let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
+    member this.CreateRoom()    = (this :> ISignalingHub).CreateRoom()
+    member this.JoinRoom roomId = (this :> ISignalingHub).JoinRoom roomId
+    member this.LeaveRoom()     = (this :> ISignalingHub).LeaveRoom()
+    member this.ConnectToRoomPlayers() = (this :> ISignalingHub).ConnectToRoomPlayers()
+
+    member _.PlayerId = connection.ConnectionId |> PlayerId.fromHubConnectionId
+
+
+let connectHub (testServer: TestServer) : Task<HubConnection * SignalingHub> =
     let httpConnectionOptions (options: HttpConnectionOptions) =
         options.HttpMessageHandlerFactory <- fun _ -> testServer.CreateHandler()
 
@@ -44,5 +57,5 @@ let connectHub (testServer: TestServer) : Task<HubConnection * ISignalingHub> =
 
     task {
         do! connection.StartAsync()
-        return connection, SignalingHub(connection) :> ISignalingHub
+        return connection, SignalingHub(connection)
     }

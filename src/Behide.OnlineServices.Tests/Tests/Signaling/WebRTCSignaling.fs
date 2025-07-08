@@ -13,7 +13,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
     testList "WebRTC Signaling" [
         testList "StartConnectionAttempt" [
             testTask "Create connection attempt" {
-                let! (conn: HubConnection, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (conn: HubConnection, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let! offerId =
                     Common.fakeSdpDescription
@@ -40,7 +40,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
         testList "JoinConnectionAttempt" [
             testTask "Join connection attempt" {
                 // Create a connection attempt
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
 
                 let originalSdpDesc = Common.fakeSdpDescription
 
@@ -56,7 +56,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
                 |> Flip.Expect.isNone "Offer should be marked as not answered"
 
                 // Join connection attempt
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 let! sdpDescription =
                     offerId
@@ -82,7 +82,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Join nonexisting connection attempt" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let fakeOfferId = ConnectionAttemptId.create()
 
@@ -98,9 +98,9 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Join already answered connection attempt" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub3: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub3: SignalingHub) = testServer |> connectHub
 
                 // Create a connection attempt
                 let! offerId =
@@ -126,7 +126,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Join connection attempt as the initiator" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -149,8 +149,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
 
         testList "EndConnectionAttempt" [
             testTask "Initiator end connection attempt" {
-                let! (_, hub1: ISignalingHub) = testServer |> connectHub
-                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+                let! (_, hub1: SignalingHub) = testServer |> connectHub
+                let! (_, hub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -174,8 +174,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Answerer end connection attempt" {
-                let! (_, hub1: ISignalingHub) = testServer |> connectHub
-                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+                let! (_, hub1: SignalingHub) = testServer |> connectHub
+                let! (_, hub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -199,7 +199,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "End nonexisting connection attempt" {
-                let! (_, hub: ISignalingHub) = testServer |> connectHub
+                let! (_, hub: SignalingHub) = testServer |> connectHub
 
                 let fakeOfferId = ConnectionAttemptId.create()
 
@@ -214,8 +214,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "End ended connection attempt" {
-                let! (_, hub1: ISignalingHub) = testServer |> connectHub
-                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+                let! (_, hub1: SignalingHub) = testServer |> connectHub
+                let! (_, hub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -246,8 +246,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "End connection attempt as not participant" {
-                let! (_, hub1: ISignalingHub) = testServer |> connectHub
-                let! (_, hub2: ISignalingHub) = testServer |> connectHub
+                let! (_, hub1: SignalingHub) = testServer |> connectHub
+                let! (_, hub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -268,9 +268,9 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "End answered connection attempt as not participant" {
-                let! (_, hub1: ISignalingHub) = testServer |> connectHub // Initiator
-                let! (_, hub2: ISignalingHub) = testServer |> connectHub // Answerer
-                let! (_, hub3: ISignalingHub) = testServer |> connectHub // Other
+                let! (_, hub1: SignalingHub) = testServer |> connectHub // Initiator
+                let! (_, hub2: SignalingHub) = testServer |> connectHub // Answerer
+                let! (_, hub3: SignalingHub) = testServer |> connectHub // Other
 
                 // Create connection attempt
                 let! offerId =
@@ -298,8 +298,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
 
         testList "SendAnswer" [
             testTask "Send answer" {
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 // Subscribe to SdpAnswerReceived event
                 let sdpAnswerReceivedTcs = Common.TimedTaskCompletionSource<ConnectionAttemptId * SdpDescription>(1000)
@@ -341,7 +341,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send answer to nonexisting connection attempt" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let fakeOfferId = ConnectionAttemptId.create()
 
@@ -358,8 +358,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send answer to not joined connection attempt" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -381,9 +381,9 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send answer to joined connection attempt by another player" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub3: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub3: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -412,8 +412,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
 
         testList "SendIceCandidate" [
             testTask "Send ice candidate" {
-                let! (conn1: HubConnection, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (conn1: HubConnection, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 // Subscribe to IceCandidateReceived event
                 let iceCandidateReceivedTcs = Common.TimedTaskCompletionSource<ConnectionAttemptId * IceCandidate>(1000)
@@ -455,7 +455,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send ice candidate to nonexisting connection attempt" {
-                let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub: SignalingHub) = testServer |> connectHub
 
                 let fakeOfferId = ConnectionAttemptId.create()
 
@@ -472,8 +472,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send ice candidate to not joined connection attempt" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -495,9 +495,9 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send ice candidate to joined connection attempt by another player" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub3: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub3: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =
@@ -524,8 +524,8 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptS
             }
 
             testTask "Send ice candidate to connection attempt without answerer" {
-                let! (_, signalingHub1: ISignalingHub) = testServer |> connectHub
-                let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
+                let! (_, signalingHub1: SignalingHub) = testServer |> connectHub
+                let! (_, signalingHub2: SignalingHub) = testServer |> connectHub
 
                 // Create connection attempt
                 let! offerId =

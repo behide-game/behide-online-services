@@ -3,7 +3,7 @@
 open Behide.OnlineServices
 open Expecto
 
-[<FTests>]
+[<Tests>]
 let tests =
     testList "Types" [
         testList "Pair" [
@@ -31,7 +31,7 @@ let tests =
 
         testList "Signaling" [
             testList "RoomId" [
-                testTheory "correct parsing"
+                testTheory "Correct parsing"
                     [ "abcd"
                       "ABCD"
                       "0123"
@@ -40,7 +40,7 @@ let tests =
                       "A1B3" ]
                     (Signaling.RoomId.tryParse >> Flip.Expect.isSome "Room id should be parsable")
 
-                testTheory "incorrect room id not parsable"
+                testTheory "Incorrect room id not parsable"
                     [ "abc"
                       "abç"
                       "abçd"
@@ -49,7 +49,9 @@ let tests =
                       "ä1b3"
                       "A1ü3"
                       "Ü1Ö3"
-                      "01234" ]
+                      "01234"
+                      "😃😃😃😃"
+                      "😃😃" ]
                     (Signaling.RoomId.tryParse >> Flip.Expect.isNone "Room id should not be parsable")
             ]
         ]
