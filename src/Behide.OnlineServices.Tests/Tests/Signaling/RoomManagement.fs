@@ -1,4 +1,4 @@
-module Behide.OnlineServices.Tests.Signaling.RoomManagement
+﻿module Behide.OnlineServices.Tests.Signaling.RoomManagement
 
 open Expecto
 open FsToolkit.ErrorHandling
@@ -184,7 +184,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                     let! roomId = roomCreator.CreateRoom() |> Task.map (Flip.Expect.wantOk "Room creation should success")
 
                     // Join room
-                    let cts = new CancellationTokenSource(TimeSpan.FromSeconds 20.)
+                    use cts = new CancellationTokenSource(TimeSpan.FromSeconds 20.)
                     let peerIds = ConcurrentBag([ roomCreator.PlayerId, 1 ])
 
                     do! Parallel.ForEachAsync(
@@ -283,7 +283,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                         |> Task.map List.ofArray
 
                     // Register handlers
-                    let cts = new CancellationTokenSource()
+                    use cts = new CancellationTokenSource()
                     let connAttemptIdsTask =
                         players
                         |> List.indexed
@@ -415,7 +415,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                         )
 
                     // Connect players
-                    let cts = new CancellationTokenSource(TimeSpan.FromSeconds 10.)
+                    use cts = new CancellationTokenSource(TimeSpan.FromSeconds 10.)
                     let connectionsMade = Array.init nbOfPlayers (fun _ -> Array.create nbOfPlayers false)
 
                     do! Parallel.ForEachAsync(
@@ -651,5 +651,81 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                 roomStore.Get roomId
                 |> Flip.Expect.isNone "Room should be removed"
             }
+
+            testTheoryTask
+                "Leave room while other players are joining"
+                [ (3, 1, 1)
+                  (3, 3, 2)
+                  (3, 2, 3)
+                  (100, 50, 50)
+                  (100, 100, 42) ]
+                (fun (initialPlayerCount, leavingPlayerCount, joiningPlayerCount) -> task {
+                    let! inRoomPlayers = List.init initialPlayerCount (fun _ -> testServer |> connectHub) |> Task.WhenAll
+                    let! joiningPlayers = List.init joiningPlayerCount (fun _ -> testServer |> connectHub) |> Task.WhenAll
+                    let leavingPlayers = ArraySegment(inRoomPlayers, initialPlayerCount - leavingPlayerCount, leavingPlayerCount)
+
+                    let! roomId = inRoomPlayers[0].CreateRoom() |> Task.map (Flip.Expect.wantOk "Room creation should success")
+                    do! inRoomPlayers
+                        |> Array.tail
+                        |> Array.map _.JoinRoom(roomId)
+                        |> Task.WhenAll
+                        |> Task.map (Array.iter (Flip.Expect.isOk "Should be able to join room"))
+
+                    use cts = new CancellationTokenSource()
+                    let joinTcs = TaskCompletionSource()
+                    let leaveTcs = TaskCompletionSource()
+
+                    let join () =
+                        Parallel.ForEachAsync(
+                            joiningPlayers,
+                            ParallelOptions(
+                                MaxDegreeOfParallelism = joiningPlayers.Length,
+                                CancellationToken = cts.Token
+                            ),
+                            Func<TestHubClient, _, _>(fun player ct ->
+                                player.JoinRoom(roomId)
+                                |> Task.map (Flip.Expect.isOk "Should be able to join the room")
+                                |> ValueTask
+                            )
+                        ).ContinueWith(fun _ -> joinTcs.SetResult())
+                        |> ignore
+                    let leave () =
+                        Parallel.ForEachAsync(
+                            leavingPlayers,
+                            ParallelOptions(
+                                MaxDegreeOfParallelism = joiningPlayers.Length,
+                                CancellationToken = cts.Token
+                            ),
+                            Func<TestHubClient, _, _>(fun player ct ->
+                                player.LeaveRoom()
+                                |> Task.map (Flip.Expect.isOk "Should be able to leave the room")
+                                |> ValueTask
+                            )
+                        ).ContinueWith(fun _ -> leaveTcs.SetResult())
+                        |> ignore
+
+                    cts.CancelAfter(TimeSpan.FromSeconds 20.)
+                    Parallel.Invoke(join, leave)
+                    do! Task.WhenAll(joinTcs.Task, leaveTcs.Task)
+
+                    let room = roomStore.Get roomId |> Flip.Expect.wantSome "Room should still exist"
+
+                    // Check if players correctly leaved
+                    Expect.all
+                        leavingPlayers
+                        (fun player -> room.Players.ContainsKey player.PlayerId |> not)
+                        "All leaving players id should be absent from the room dict"
+
+                    // Check if players correctly joined
+                    Expect.all
+                        joiningPlayers
+                        (fun player -> room.Players.ContainsKey player.PlayerId)
+                        "All joining players id should be present in the room dict"
+
+                    Expect.equal
+                        room.Players.Count
+                        (initialPlayerCount - leavingPlayerCount + joiningPlayerCount)
+                        "The room should have the correct number of players"
+                })
         ]
     ]

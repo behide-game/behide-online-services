@@ -1,4 +1,4 @@
-module Behide.OnlineServices.Hubs.Signaling.RoomManagement
+﻿module Behide.OnlineServices.Hubs.Signaling.RoomManagement
 
 open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
@@ -189,7 +189,7 @@ let connectToRoomPlayers (hub: Hub) (playerStore: IPlayerStore) (_connectionAtte
                  FailedCreations = failed |> List.toArray }
     }
 
-let leaveRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) = // TODO: Add tests (ex: Leave while another is connecting)
+let leaveRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) =
     taskResult {
         let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
