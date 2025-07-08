@@ -16,7 +16,7 @@ type SignalingHub(connAttemptStore: IConnAttemptStore, roomStore: IRoomStore, pl
             let playerConnId = hub.Context.ConnectionId |> ConnId.parse
 
             let playerConn =
-                { ConnectionId = playerConnId
+                { Id = playerConnId
                   ConnAttemptIds = []
                   Room = None }
 

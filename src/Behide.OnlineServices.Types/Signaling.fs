@@ -67,6 +67,19 @@ type RoomId =
         | false -> None
         | true -> RoomId str |> Some
 
+/// A connection between 2 players of the same room
+type Connection = // TODO: Add tests
+    private { FirstPlayerConnectionId: ConnId
+              SecondPlayerConnectionId: ConnId }
+
+    static member create firstConnectionId secondConnectionId =
+        { FirstPlayerConnectionId = min firstConnectionId secondConnectionId
+          SecondPlayerConnectionId = max firstConnectionId secondConnectionId }
+
+    static member playerIsPartOf connection playerConnectionId =
+        connection.FirstPlayerConnectionId = playerConnectionId
+        || connection.SecondPlayerConnectionId = playerConnectionId
+
 /// A room, also a group of players that are connected to each other
 type Room =
     { Id: RoomId
@@ -74,8 +87,8 @@ type Room =
       /// Contains the initiator
       Players: Dictionary<ConnId, int>
       /// A list of the connections between the peers (in the tuple, the first is always the lowest peerId)
-      Connections: HashSet<ConnId * ConnId>
-      ConnectionsInProgress: HashSet<ConnId * ConnId>
+      Connections: HashSet<Connection>
+      ConnectionsInProgress: HashSet<Connection>
       Semaphore: System.Threading.SemaphoreSlim }
 
 
@@ -83,7 +96,7 @@ type Room =
 /// Player state in the signaling process
 /// Only for the server to keep track of the player state
 type PlayerConnection =
-    { ConnectionId: ConnId
+    { Id: ConnId
       ConnAttemptIds: ConnAttemptId list
       Room: RoomId option }
 
@@ -147,7 +160,6 @@ module Errors =
         | PlayerConnectionNotFound = 0
         | NotInARoom = 1
         | PlayerNotInRoomPlayers = 2
-        | FailedToUpdateRoom = 3
 
     type LeaveRoomError =
         | PlayerConnectionNotFound = 0

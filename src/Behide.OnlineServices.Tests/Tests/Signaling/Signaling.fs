@@ -23,7 +23,7 @@ let signalingTests =
                 playerConnStore.Get connId
                 |> Flip.Expect.wantSome "Client should be registered in the player connections store"
 
-            Expect.equal playerConn.ConnectionId connId "Connection ID should be the same"
+            Expect.equal playerConn.Id connId "Connection ID should be the same"
         }
 
         RoomManagement.tests testServer roomStore

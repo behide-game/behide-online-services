@@ -228,13 +228,10 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
                 let connId1 = conn1.ConnectionId |> ConnId.parse
                 let connId2 = conn2.ConnectionId |> ConnId.parse
-                let connection =
-                    min connId1 connId2,
-                    max connId1 connId2
 
                 Expect.containsAll
                     room.Connections
-                    [ connection ]
+                    [ Connection.create connId1 connId2 ]
                     "Room should contain the connection between the two players"
             }
 
@@ -328,9 +325,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
                             match connId <> connIdThatConnects with
                             | false -> None // The player that connects should not be connected to himself
-                            | true ->
-                                Some (min connIdThatConnects connId,
-                                      max connIdThatConnects connId)
+                            | true -> Some <| Connection.create connIdThatConnects connId
                         )
 
                     Expect.containsAll
@@ -453,10 +448,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                                 |> ConnId.parse
                             )
                             |> List.filter ((<>) requestingConnectionId)
-                            |> List.map (fun otherConnectionId ->
-                                min requestingConnectionId otherConnectionId,
-                                max requestingConnectionId otherConnectionId
-                            )
+                            |> List.map (Connection.create requestingConnectionId)
                         )
 
                     Expect.containsAll room.Connections expectedConnections "All connections should be present"
