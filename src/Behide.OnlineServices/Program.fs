@@ -18,9 +18,12 @@ let configureServices (services: IServiceCollection) =
                 .AddToJsonSerializerOptions(options.PayloadSerializerOptions)
         )
     |> ignore
-    services.AddSingleton<Signaling.IConnAttemptStore, Signaling.ConnAttemptStore>() |> ignore
+    services
+
+let configureSingletons (services: IServiceCollection) =
+    services.AddSingleton<Signaling.IConnectionAttemptStore, Signaling.ConnectionAttemptStore>() |> ignore
     services.AddSingleton<Signaling.IRoomStore, Signaling.RoomStore>() |> ignore
-    services.AddSingleton<Signaling.IPlayerConnStore, Signaling.PlayerConnStore>() |> ignore
+    services.AddSingleton<Signaling.IPlayerStore, Signaling.PlayerStore>() |> ignore
     services
 
 let appEndpoints =
@@ -30,7 +33,7 @@ let appEndpoints =
 let main args =
     let wapp =
         WebApplication.CreateBuilder(args)
-            .AddServices(fun _ -> configureServices)
+            .AddServices(fun _ -> configureServices >> configureSingletons)
             .Build()
 
     wapp.UseRouting()

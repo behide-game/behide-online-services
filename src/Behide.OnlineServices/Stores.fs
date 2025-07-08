@@ -23,6 +23,5 @@ type Store<'Id, 'Item when 'Id: not null>() =
             |> Seq.tryFind (_.Value >> predicate)
             |> Option.map _.Deconstruct()
 
-        /// Don't forget to use "lock"
         member _.Update id oldValue newValue =
             dict.TryUpdate(id, newValue, oldValue)
