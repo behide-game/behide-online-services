@@ -1,8 +1,6 @@
 ﻿module Behide.OnlineServices.Tests.Signaling.Common
 
 open Behide.OnlineServices.Signaling
-open Expecto
-open FsToolkit.ErrorHandling
 
 open System.Text.Json.Serialization
 open System.Threading.Tasks

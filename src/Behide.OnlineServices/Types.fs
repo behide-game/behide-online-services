@@ -1,4 +1,4 @@
-﻿namespace Behide.OnlineServices
+namespace Behide.OnlineServices
 
 /// Unordered pair
 type Pair<'T when 'T: comparison> =

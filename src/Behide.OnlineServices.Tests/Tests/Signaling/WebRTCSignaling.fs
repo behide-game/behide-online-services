@@ -3,12 +3,11 @@
 open Expecto
 open FsToolkit.ErrorHandling
 
-open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 open Behide.OnlineServices.Tests
 open Behide.OnlineServices.Tests.Signaling.Common
 
-let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptStore) =
+let tests testServer (connectionAttemptStore: IConnectionAttemptStore) =
     testList "WebRTC Signaling" [
         testList "StartConnectionAttempt" [
             testTask "Create connection attempt" {

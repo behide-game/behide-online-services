@@ -1,4 +1,4 @@
-﻿namespace Behide.OnlineServices.Signaling.Errors
+module Behide.OnlineServices.Signaling.Errors
 
 type StartConnectionAttemptError =
     | PlayerNotFound = 0

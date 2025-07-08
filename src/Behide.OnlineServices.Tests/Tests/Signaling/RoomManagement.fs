@@ -14,7 +14,7 @@ open Behide.OnlineServices.Signaling
 open Behide.OnlineServices.Tests
 open Behide.OnlineServices.Tests.Signaling.Common
 
-let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
+let tests testServer (roomStore: IRoomStore) =
     testList "RoomManagement" [
         testList "CreateRoom" [
             testTask "Create room should success" {
@@ -236,13 +236,13 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                 Expect.equal secondPeerId 2 "The second player should have a peerId to 2"
 
                 // Register "ConnectionRequested" handler on first player
-                let mutable connAttemptId = None
+                let mutable connectionAttemptId = None
 
                 hub1.SetHandlerFor.ConnectionRequested(fun _peerId ->
                     Common.fakeSdpDescription
                     |> hub1.StartConnectionAttempt
                     |> Task.map (function
-                        | Ok c -> connAttemptId <- Some c; c
+                        | Ok c -> connectionAttemptId <- Some c; c
                         | Error e -> failtestf "Failed to create connection attempt: %A" e)
                 )
                 |> ignore
@@ -254,10 +254,10 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
                 Expect.isEmpty res.FailedCreations "No connection attempt creation should be failed"
 
-                let connAttemptId = Expect.wantSome connAttemptId "An connection attempt id should have been generated"
+                let connectionAttemptId = Expect.wantSome connectionAttemptId "An connection attempt id should have been generated"
                 Expect.sequenceEqual
                     (res.PlayersConnectionInfo |> List.ofArray)
-                    [ { PeerId = 1; ConnAttemptId = connAttemptId } ]
+                    [ { PeerId = 1; ConnectionAttemptId = connectionAttemptId } ]
                     "Players connection info should contain the first player connection info and only that"
 
                 // Check connections
@@ -284,18 +284,18 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
                     // Register handlers
                     use cts = new CancellationTokenSource()
-                    let connAttemptIdsTask =
+                    let connectionAttemptIdsTask =
                         players
                         |> List.indexed
                         |> List.choose (fun (idx, hub) ->
-                            let connAttemptIdTcs = TaskCompletionSource<Result<ConnectionAttemptId, _>>()
-                            cts.Token.Register(fun _ -> connAttemptIdTcs.TrySetCanceled() |> ignore) |> ignore
+                            let connectionAttemptIdTcs = TaskCompletionSource<Result<ConnectionAttemptId, _>>()
+                            cts.Token.Register(fun _ -> connectionAttemptIdTcs.TrySetCanceled() |> ignore) |> ignore
 
                             hub.SetHandlerFor.ConnectionRequested(fun _ ->
                                 Common.fakeSdpDescription
                                 |> hub.StartConnectionAttempt
                                 |> Task.map (fun res ->
-                                    connAttemptIdTcs.SetResult(res)
+                                    connectionAttemptIdTcs.SetResult(res)
 
                                     match res with
                                     | Ok c -> c
@@ -306,7 +306,7 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
 
                             match idx = peerThatConnects with // Don't await the connection attempt creation for the peer that will connect
                             | true -> None
-                            | false -> Some connAttemptIdTcs.Task
+                            | false -> Some connectionAttemptIdTcs.Task
                         )
                         |> List.sequenceTaskResultA
                         |> Task.map (Flip.Expect.wantOk "Failed to create some connection attempt")
@@ -329,16 +329,16 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                         |> Task.map (Flip.Expect.wantOk "Failed to create connection information for players")
 
                     cts.CancelAfter 1000
-                    let! connAttemptIds = connAttemptIdsTask
+                    let! connectionAttemptIds = connectionAttemptIdsTask
 
                     Expect.isEmpty res.FailedCreations "All connection attempt creations should be successful"
                     Expect.hasLength res.PlayersConnectionInfo (players.Length - 1) "Their should be one player connection info per player to connect to"
-                    Expect.hasLength connAttemptIds (players.Length - 1) "Their should be one connection attempt id per players to connect to"
-                    Expect.hasLength connAttemptIds res.PlayersConnectionInfo.Length "Their should be one connection attempt id per player connection info"
+                    Expect.hasLength connectionAttemptIds (players.Length - 1) "Their should be one connection attempt id per players to connect to"
+                    Expect.hasLength connectionAttemptIds res.PlayersConnectionInfo.Length "Their should be one connection attempt id per player connection info"
 
                     Expect.containsAll
-                        connAttemptIds
-                        (res.PlayersConnectionInfo |> Array.map _.ConnAttemptId)
+                        connectionAttemptIds
+                        (res.PlayersConnectionInfo |> Array.map _.ConnectionAttemptId)
                         "Created connection attempt ids should be the same that the received connection attempt ids"
 
                     // Check connections

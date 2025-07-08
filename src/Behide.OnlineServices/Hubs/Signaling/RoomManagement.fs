@@ -123,8 +123,8 @@ let requestConnectionForPlayer (hub: Hub) player requestingPeerId targetPeerId t
 
         match r with
         | null -> return! Error targetPeerId
-        | connAttemptId ->
-            return { PeerId = targetPeerId; ConnAttemptId = connAttemptId },
+        | connectionAttemptId ->
+            return { PeerId = targetPeerId; ConnectionAttemptId = connectionAttemptId },
                    Pair.create player.Id targetPlayerId
     }
 

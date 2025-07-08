@@ -10,17 +10,17 @@ open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 
 let createTestServer () =
-    let connectionAttemptStore = Hubs.Signaling.ConnectionAttemptStore()
-    let roomStore = Hubs.Signaling.RoomStore()
-    let playerConnStore = Hubs.Signaling.PlayerStore()
+    let connectionAttemptStore = ConnectionAttemptStore()
+    let roomStore = RoomStore()
+    let playerConnStore = PlayerStore()
 
     let hostBuilder =
         WebHostBuilder()
             .ConfigureServices(fun services ->
                 services |> Program.configureServices |> ignore
-                services.AddSingleton<Hubs.Signaling.IConnectionAttemptStore>(connectionAttemptStore) |> ignore
-                services.AddSingleton<Hubs.Signaling.IRoomStore>(roomStore) |> ignore
-                services.AddSingleton<Hubs.Signaling.IPlayerStore>(playerConnStore) |> ignore
+                services.AddSingleton<IConnectionAttemptStore>(connectionAttemptStore) |> ignore
+                services.AddSingleton<IRoomStore>(roomStore) |> ignore
+                services.AddSingleton<IPlayerStore>(playerConnStore) |> ignore
             )
             .Configure(fun app ->
                 app.UseRouting()

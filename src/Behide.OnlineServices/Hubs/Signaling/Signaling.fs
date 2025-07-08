@@ -49,10 +49,10 @@ type SignalingHub(connectionAttemptStore: IConnectionAttemptStore, roomStore: IR
             // Remove connection attempts
             let removeConnectionAttemptsError =
                 player.ConnectionAttemptIds
-                |> List.filter (fun connAttemptId ->
-                    match connAttemptId |> connectionAttemptStore.Get with
+                |> List.filter (fun connectionAttemptId ->
+                    match connectionAttemptId |> connectionAttemptStore.Get with
                     | None -> false
-                    | Some _ -> connAttemptId |> connectionAttemptStore.Remove // TODO: Notify other player in the connection attempt
+                    | Some _ -> connectionAttemptId |> connectionAttemptStore.Remove // TODO: Notify other player in the connection attempt
                 )
                 |> function
                     | [] -> None
@@ -85,10 +85,10 @@ type SignalingHub(connectionAttemptStore: IConnectionAttemptStore, roomStore: IR
 
     // --- WebRTC Signaling ---
     member hub.StartConnectionAttempt (sdpDescription: SdpDescription) = WebRTCSignaling.startConnectionAttempt hub playerStore connectionAttemptStore sdpDescription
-    member hub.JoinConnectionAttempt (connAttemptId: ConnectionAttemptId) = WebRTCSignaling.joinConnectionAttempt hub playerStore connectionAttemptStore connAttemptId
-    member hub.SendAnswer (connAttemptId: ConnectionAttemptId) (answer: SdpDescription) = WebRTCSignaling.sendAnswer hub playerStore connectionAttemptStore connAttemptId answer
-    member hub.SendIceCandidate (connAttemptId: ConnectionAttemptId) (iceCandidate: IceCandidate) = WebRTCSignaling.sendIceCandidate hub playerStore connectionAttemptStore connAttemptId iceCandidate
-    member hub.EndConnectionAttempt (connAttemptId: ConnectionAttemptId) = WebRTCSignaling.endConnectionAttempt hub playerStore connectionAttemptStore connAttemptId
+    member hub.JoinConnectionAttempt (connectionAttemptId: ConnectionAttemptId) = WebRTCSignaling.joinConnectionAttempt hub playerStore connectionAttemptStore connectionAttemptId
+    member hub.SendAnswer (connectionAttemptId: ConnectionAttemptId) (answer: SdpDescription) = WebRTCSignaling.sendAnswer hub playerStore connectionAttemptStore connectionAttemptId answer
+    member hub.SendIceCandidate (connectionAttemptId: ConnectionAttemptId) (iceCandidate: IceCandidate) = WebRTCSignaling.sendIceCandidate hub playerStore connectionAttemptStore connectionAttemptId iceCandidate
+    member hub.EndConnectionAttempt (connectionAttemptId: ConnectionAttemptId) = WebRTCSignaling.endConnectionAttempt hub playerStore connectionAttemptStore connectionAttemptId
 
     // --- Rooms ---
     member hub.CreateRoom() = RoomManagement.createRoom hub playerStore connectionAttemptStore roomStore

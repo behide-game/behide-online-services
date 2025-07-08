@@ -1,9 +1,7 @@
 namespace Behide.OnlineServices.Signaling
 
 open System
-open System.Collections.Generic
 open System.Threading.Tasks
-open Behide.OnlineServices
 
 type SdpDescription =
     { ``type``: string
@@ -14,26 +12,11 @@ type IceCandidate =
       index: int
       name: string }
 
-type PlayerId =
-    private | PlayerId of string
-    static member fromHubConnectionId connId = PlayerId connId
-    static member raw (PlayerId connId) = connId
-
-
-// --- Connection attempt
 type ConnectionAttemptId =
     private | ConnectionAttemptId of Guid
     static member create () = Guid.NewGuid() |> ConnectionAttemptId
     static member raw (ConnectionAttemptId guid) = guid.ToString()
 
-/// A WebRTC connection attempt
-type ConnectionAttempt =
-    { Id: ConnectionAttemptId
-      InitiatorConnectionId: PlayerId
-      Offer: SdpDescription
-      Answerer: PlayerId option }
-
-// --- Room
 type RoomId =
     private | RoomId of string
 
@@ -65,28 +48,10 @@ type RoomId =
         | false -> None
         | true -> RoomId loweredStr |> Some
 
-/// A room, also a group of players that are connected to each other
-type Room =
-    { Id: RoomId
-      /// Player peer ids by player id
-      Players: Dictionary<PlayerId, int>
-      /// A list of the connections between the peers
-      Connections: HashSet<PlayerId Pair>
-      ConnectionsInProgress: HashSet<PlayerId Pair>
-      Semaphore: System.Threading.SemaphoreSlim }
-
-
-/// Player state in the signaling process
-/// Only for the server to keep track of the player state
-type Player =
-    { Id: PlayerId
-      ConnectionAttemptIds: ConnectionAttemptId list
-      Room: {| Id: RoomId; PeerId: int |} option }
-
 
 /// <summary>Information needed to connect to a player</summary>
 /// <remarks>Used when a player join a room and need to connect to the other players</remarks>
-type PlayerConnectionInfo = { PeerId: int; ConnAttemptId: ConnectionAttemptId }
+type PlayerConnectionInfo = { PeerId: int; ConnectionAttemptId: ConnectionAttemptId }
 type RoomConnectionInfo =
     { PlayersConnectionInfo: PlayerConnectionInfo array
       FailedCreations: int array }
