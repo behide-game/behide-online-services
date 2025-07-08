@@ -18,14 +18,14 @@ let signalingTests =
 
             Expect.equal connection.State HubConnectionState.Connected "Should be connected to the hub"
 
-            let connId = connection.ConnectionId |> ConnId.parse
-            let playerConn =
-                playerConnStore.Get connId
+            let playerId = connection.ConnectionId |> PlayerId.fromHubConnectionId
+            let player =
+                playerConnStore.Get playerId
                 |> Flip.Expect.wantSome "Client should be registered in the player connections store"
 
-            Expect.equal playerConn.Id connId "Connection ID should be the same"
+            Expect.equal player.Id playerId "Player ids should be the same"
         }
 
-        RoomManagement.tests testServer roomStore
         WebRTCSignaling.tests testServer connectionAttemptStore
+        RoomManagement.tests testServer roomStore
     ]

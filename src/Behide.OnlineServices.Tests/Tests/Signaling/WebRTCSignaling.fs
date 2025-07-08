@@ -9,7 +9,7 @@ open Behide.OnlineServices.Signaling
 open Behide.OnlineServices.Tests
 open Behide.OnlineServices.Tests.Signaling.Common
 
-let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) =
+let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnectionAttemptStore) =
     testList "WebRTC Signaling" [
         testList "StartConnectionAttempt" [
             testTask "Create connection attempt" {
@@ -27,11 +27,11 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     offer.InitiatorConnectionId
-                    (conn.ConnectionId |> ConnId.parse)
+                    (conn.ConnectionId |> PlayerId.fromHubConnectionId)
                     "Offer initiator should be the player connection id"
 
                 Expect.equal
-                    offer.SdpDescription
+                    offer.Offer
                     Common.fakeSdpDescription
                     "Offer SDP description should be the same"
             }
@@ -77,14 +77,14 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     offer.InitiatorConnectionId
-                    (conn1.ConnectionId |> ConnId.parse)
+                    (conn1.ConnectionId |> PlayerId.fromHubConnectionId)
                     "Offer initiator should be the first player connection id"
             }
 
             testTask "Join nonexisting connection attempt" {
                 let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = ConnAttemptId.create()
+                let fakeOfferId = ConnectionAttemptId.create()
 
                 let! (error: Errors.JoinConnectionAttemptError) =
                     fakeOfferId
@@ -93,7 +93,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.JoinConnectionAttemptError.OfferNotFound
+                    Errors.JoinConnectionAttemptError.ConnectionAttemptNotFound
                     "Nonexisting connection attempt joining should fail"
             }
 
@@ -121,7 +121,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.JoinConnectionAttemptError.OfferAlreadyAnswered
+                    Errors.JoinConnectionAttemptError.ConnectionAttemptAlreadyAnswered
                     "Already answered connection attempt joining should fail"
             }
 
@@ -201,7 +201,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
             testTask "End nonexisting connection attempt" {
                 let! (_, hub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = ConnAttemptId.create()
+                let fakeOfferId = ConnectionAttemptId.create()
 
                 let! (error: Errors.EndConnectionAttemptError) =
                     hub.EndConnectionAttempt fakeOfferId
@@ -209,7 +209,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.EndConnectionAttemptError.OfferNotFound
+                    Errors.EndConnectionAttemptError.ConnectionAttemptNotFound
                     "Ending nonexisting connection attempt should fail"
             }
 
@@ -241,7 +241,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.EndConnectionAttemptError.OfferNotFound
+                    Errors.EndConnectionAttemptError.ConnectionAttemptNotFound
                     "Ending already ended connection attempt should fail"
             }
 
@@ -302,9 +302,9 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
                 let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
 
                 // Subscribe to SdpAnswerReceived event
-                let sdpAnswerReceivedTcs = Common.TimedTaskCompletionSource<ConnAttemptId * SdpDescription>(1000)
+                let sdpAnswerReceivedTcs = Common.TimedTaskCompletionSource<ConnectionAttemptId * SdpDescription>(1000)
 
-                conn1.On("SdpAnswerReceived", fun (offerId: ConnAttemptId) (sdpDescription: SdpDescription) ->
+                conn1.On("SdpAnswerReceived", fun (offerId: ConnectionAttemptId) (sdpDescription: SdpDescription) ->
                     sdpAnswerReceivedTcs.SetResult(offerId, sdpDescription)
                 )
                 |> ignore
@@ -327,7 +327,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
                     |> Task.map (Flip.Expect.isOk "Answer sending should success")
 
                 // Test received answer
-                let! (receivedOfferId: ConnAttemptId, receivedSdpDesc: SdpDescription) = sdpAnswerReceivedTcs.Task
+                let! (receivedOfferId: ConnectionAttemptId, receivedSdpDesc: SdpDescription) = sdpAnswerReceivedTcs.Task
 
                 Expect.equal
                     receivedOfferId
@@ -343,7 +343,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
             testTask "Send answer to nonexisting connection attempt" {
                 let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = ConnAttemptId.create()
+                let fakeOfferId = ConnectionAttemptId.create()
 
                 let! (error: Errors.SendAnswerError) =
                     signalingHub.SendAnswer
@@ -353,7 +353,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.SendAnswerError.OfferNotFound
+                    Errors.SendAnswerError.ConnectionAttemptNotFound
                     "Sending answer to nonexisting connection attempt should fail"
             }
 
@@ -416,9 +416,9 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
                 let! (_, signalingHub2: ISignalingHub) = testServer |> connectHub
 
                 // Subscribe to IceCandidateReceived event
-                let iceCandidateReceivedTcs = Common.TimedTaskCompletionSource<ConnAttemptId * IceCandidate>(1000)
+                let iceCandidateReceivedTcs = Common.TimedTaskCompletionSource<ConnectionAttemptId * IceCandidate>(1000)
 
-                conn1.On("IceCandidateReceived", fun (offerId: ConnAttemptId) (iceCandidate: IceCandidate) ->
+                conn1.On("IceCandidateReceived", fun (offerId: ConnectionAttemptId) (iceCandidate: IceCandidate) ->
                     iceCandidateReceivedTcs.SetResult(offerId, iceCandidate)
                 )
                 |> ignore
@@ -441,7 +441,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
                     |> Task.map (Flip.Expect.isOk "Ice candidate sending should success")
 
                 // Test received ice candidate
-                let! (receivedOfferId: ConnAttemptId, receivedIceCandidate: IceCandidate) = iceCandidateReceivedTcs.Task
+                let! (receivedOfferId: ConnectionAttemptId, receivedIceCandidate: IceCandidate) = iceCandidateReceivedTcs.Task
 
                 Expect.equal
                     receivedOfferId
@@ -457,7 +457,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
             testTask "Send ice candidate to nonexisting connection attempt" {
                 let! (_, signalingHub: ISignalingHub) = testServer |> connectHub
 
-                let fakeOfferId = ConnAttemptId.create()
+                let fakeOfferId = ConnectionAttemptId.create()
 
                 let! (error: Errors.SendIceCandidateError) =
                     signalingHub.SendIceCandidate
@@ -467,7 +467,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.SendIceCandidateError.OfferNotFound
+                    Errors.SendIceCandidateError.ConnectionAttemptNotFound
                     "Sending ice candidate to nonexisting connection attempt should fail"
             }
 
@@ -490,7 +490,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.SendIceCandidateError.NotAnswerer
+                    Errors.SendIceCandidateError.NoAnswerer
                     "Sending ice candidate to not joined connection attempt should fail"
             }
 
@@ -542,7 +542,7 @@ let tests testServer (connectionAttemptStore: Hubs.Signaling.IConnAttemptStore) 
 
                 Expect.equal
                     error
-                    Errors.SendIceCandidateError.NotAnswerer
+                    Errors.SendIceCandidateError.NoAnswerer
                     "Sending ice candidate connection attempt should fail"
             }
         ]

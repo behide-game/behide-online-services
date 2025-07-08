@@ -3,167 +3,165 @@
 open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
 open Behide.OnlineServices.Signaling.Errors
-type Hub = Microsoft.AspNetCore.SignalR.Hub<ISignalingClient>
-
 open FsToolkit.ErrorHandling
 
-let startConnectionAttempt (hub: Hub) (playerConnectionStore: IPlayerConnectionStore) (connAttemptStore: IConnAttemptStore) (sdpDescription: SdpDescription) =
-    taskResult {
-        let playerConnId = hub.Context.ConnectionId |> ConnId.parse
+type Hub = Microsoft.AspNetCore.SignalR.Hub<ISignalingClient>
 
-        let! playerConn =
-            playerConnId
-            |> playerConnectionStore.Get
-            |> Result.ofOption StartConnectionAttemptError.PlayerConnectionNotFound
+let startConnectionAttempt (hub: Hub) (playerStore: IPlayerStore) (connectionAttemptStore: IConnectionAttemptStore) (offer: SdpDescription) =
+    taskResult {
+        let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
+
+        let! player =
+            playerId
+            |> playerStore.Get
+            |> Result.ofOption StartConnectionAttemptError.PlayerNotFound
 
         // Create connection attempt
-        let connAttempt =
-            { Id = ConnAttemptId.create ()
-              InitiatorConnectionId = playerConnId
-              SdpDescription = sdpDescription
+        let connectionAttempt =
+            { Id = ConnectionAttemptId.create ()
+              InitiatorConnectionId = playerId
+              Offer = offer
               Answerer = None }
 
-        do! connAttemptStore.Add
-                connAttempt.Id
-                connAttempt
-            |> Result.requireTrue StartConnectionAttemptError.FailedToCreateConnAttempt
+        do! connectionAttemptStore.Add connectionAttempt.Id connectionAttempt
+            |> Result.requireTrue StartConnectionAttemptError.FailedToCreateConnectionAttempt
 
         // Update player connection
-        let newPlayerConn =
-            { playerConn with ConnAttemptIds = connAttempt.Id :: playerConn.ConnAttemptIds }
+        let newPlayer =
+            { player with ConnectionAttemptIds = connectionAttempt.Id :: player.ConnectionAttemptIds }
 
-        do! playerConnectionStore.Update
-                playerConnId
-                playerConn
-                newPlayerConn
-            |> Result.requireTrue StartConnectionAttemptError.FailedToUpdatePlayerConnection
+        do! playerStore.Update
+                playerId
+                player
+                newPlayer
+            |> Result.requireTrue StartConnectionAttemptError.FailedToUpdatePlayer
 
-        return connAttempt.Id
+        return connectionAttempt.Id
     }
 
 /// Returns the offer sdp desc and allow to send the answer
-let joinConnectionAttempt (hub: Hub) (playerConnectionStore: IPlayerConnectionStore) (connAttemptStore: IConnAttemptStore) (connAttemptId: ConnAttemptId) =
+let joinConnectionAttempt (hub: Hub) (playerStore: IPlayerStore) (connectionAttemptStore: IConnectionAttemptStore) (connectionAttemptId: ConnectionAttemptId) =
     taskResult {
-        let connId = hub.Context.ConnectionId |> ConnId.parse
+        let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
-        // Check if client has a player connection
-        do! connId
-            |> playerConnectionStore.Get
-            |> Result.ofOption JoinConnectionAttemptError.PlayerConnectionNotFound
+        // Check if player exists
+        do! playerId
+            |> playerStore.Get
+            |> Result.ofOption JoinConnectionAttemptError.PlayerNotFound
             |> Result.ignore
 
         // Retrieve connection attempt
-        let! connAttempt =
-            connAttemptId
-            |> connAttemptStore.Get
-            |> Result.ofOption JoinConnectionAttemptError.OfferNotFound
+        let! connectionAttempt =
+            connectionAttemptId
+            |> connectionAttemptStore.Get
+            |> Result.ofOption JoinConnectionAttemptError.ConnectionAttemptNotFound
 
         // Check if connection attempt has not been answered
-        do! connAttempt.Answerer
-            |> Result.requireNone JoinConnectionAttemptError.OfferAlreadyAnswered
+        do! connectionAttempt.Answerer
+            |> Result.requireNone JoinConnectionAttemptError.ConnectionAttemptAlreadyAnswered
 
         // Check if the answerer is not the initiator
-        do! connAttempt.InitiatorConnectionId <> connId
+        do! connectionAttempt.InitiatorConnectionId <> playerId
             |> Result.requireTrue JoinConnectionAttemptError.InitiatorCannotJoin
 
         // Update connection attempt
-        do! connAttemptStore.Update
-                connAttemptId
-                connAttempt
-                { connAttempt with Answerer = Some connId }
-            |> Result.requireTrue JoinConnectionAttemptError.FailedToUpdateOffer
+        do! connectionAttemptStore.Update
+                connectionAttempt.Id
+                connectionAttempt
+                { connectionAttempt with Answerer = Some playerId }
+            |> Result.requireTrue JoinConnectionAttemptError.FailedToUpdateConnectionAttempt
 
-        return connAttempt.SdpDescription
+        return connectionAttempt.Offer
     }
 
-let sendAnswer (hub: Hub) (playerConnectionStore: IPlayerConnectionStore) (connAttemptStore: IConnAttemptStore) (connAttemptId: ConnAttemptId) (sdpDescription: SdpDescription) =
+let sendAnswer (hub: Hub) (playerStore: IPlayerStore) (connectionAttemptStore: IConnectionAttemptStore) (connectionAttemptId: ConnectionAttemptId) (sdpDescription: SdpDescription) =
     taskResult {
-        let connId = hub.Context.ConnectionId |> ConnId.parse
+        let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
-        // Check if client has a player connection
-        do! connId
-            |> playerConnectionStore.Get
-            |> Result.ofOption SendAnswerError.PlayerConnectionNotFound
+        // Check if player exists
+        do! playerId
+            |> playerStore.Get
+            |> Result.ofOption SendAnswerError.PlayerNotFound
             |> Result.ignore
 
         // Retrieve connection attempt
-        let! connAttempt =
-            connAttemptId
-            |> connAttemptStore.Get
-            |> Result.ofOption SendAnswerError.OfferNotFound
+        let! connectionAttempt =
+            connectionAttemptId
+            |> connectionAttemptStore.Get
+            |> Result.ofOption SendAnswerError.ConnectionAttemptNotFound
 
-        // Get answerer
-        let! answerer = connAttempt.Answerer |> Result.ofOption SendAnswerError.NotAnswerer
         // Check if the client is the answerer
-        do! connId = answerer |> Result.requireTrue SendAnswerError.NotAnswerer
+        do! connectionAttempt.Answerer
+            |> Result.ofOption SendAnswerError.NotAnswerer
+            |> Result.bind (fun pId -> Result.requireEqual pId playerId SendAnswerError.NotAnswerer)
 
         // Send answer to initiator
         try
-            do! hub.Clients.Client(connAttempt.InitiatorConnectionId |> ConnId.raw).SdpAnswerReceived connAttemptId sdpDescription
+            do! hub.Clients.Client(connectionAttempt.InitiatorConnectionId |> PlayerId.raw).SdpAnswerReceived connectionAttemptId sdpDescription
         with _ ->
             return! Error SendAnswerError.FailedToTransmitAnswer
     }
 
-let sendIceCandidate (hub: Hub) (playerConnectionStore: IPlayerConnectionStore) (connAttemptStore: IConnAttemptStore) (connAttemptId: ConnAttemptId) (iceCandidate: IceCandidate) =
+let sendIceCandidate (hub: Hub) (playerStore: IPlayerStore) (connectionAttemptStore: IConnectionAttemptStore) (connectionAttemptId: ConnectionAttemptId) (iceCandidate: IceCandidate) =
     taskResult {
-        let connId = hub.Context.ConnectionId |> ConnId.parse
+        let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
-        // Check if client has a player connection
-        do! connId
-            |> playerConnectionStore.Get
-            |> Result.ofOption SendIceCandidateError.PlayerConnectionNotFound
+        // Check if player exists
+        do! playerId
+            |> playerStore.Get
+            |> Result.ofOption SendIceCandidateError.PlayerNotFound
             |> Result.ignore
 
-        let! connAttempt =
-            connAttemptId
-            |> connAttemptStore.Get
-            |> Result.ofOption SendIceCandidateError.OfferNotFound
+        let! connectionAttempt =
+            connectionAttemptId
+            |> connectionAttemptStore.Get
+            |> Result.ofOption SendIceCandidateError.ConnectionAttemptNotFound
 
         let! answerer =
-            connAttempt.Answerer
-            |> Result.ofOption SendIceCandidateError.NotAnswerer
+            connectionAttempt.Answerer
+            |> Result.ofOption SendIceCandidateError.NoAnswerer
 
-        // Check if the client is in the connection attempt
-        do! (connId = connAttempt.InitiatorConnectionId || connId = answerer)
+        // Check if the player is in the connection attempt
+        do! (playerId = connectionAttempt.InitiatorConnectionId || playerId = answerer)
             |> Result.requireTrue SendIceCandidateError.NotParticipant
 
-        // Determine the target connection id
-        let targetConnId =
-            match connId = answerer with
-            | true -> connAttempt.InitiatorConnectionId
+        // Determine the target player
+        let targetPlayerId =
+            match playerId = answerer with
+            | true -> connectionAttempt.InitiatorConnectionId
             | false -> answerer
 
-        // Send ice candidate to other peer
+        // Send ice candidate to other player
         try
-            do! hub.Clients.Client(targetConnId |> ConnId.raw).IceCandidateReceived connAttemptId iceCandidate
+            do! hub.Clients.Client(targetPlayerId |> PlayerId.raw).IceCandidateReceived connectionAttemptId iceCandidate
         with _ ->
             return! Error SendIceCandidateError.FailedToTransmitCandidate
     }
 
-let endConnectionAttempt (hub: Hub) (playerConnectionStore: IPlayerConnectionStore) (connAttemptStore: IConnAttemptStore) (connAttemptId: ConnAttemptId) =
+let endConnectionAttempt (hub: Hub) (playerStore: IPlayerStore) (connectionAttemptStore: IConnectionAttemptStore) (connectionAttemptId: ConnectionAttemptId) =
     taskResult {
-        let connId = hub.Context.ConnectionId |> ConnId.parse
+        let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
-        // Check if client has a player connection
-        do! connId
-            |> playerConnectionStore.Get
-            |> Result.ofOption EndConnectionAttemptError.PlayerConnectionNotFound
+        // Check if player exists
+        do! playerId
+            |> playerStore.Get
+            |> Result.ofOption EndConnectionAttemptError.PlayerNotFound
             |> Result.ignore
 
-        let! connAttempt =
-            connAttemptId
-            |> connAttemptStore.Get
-            |> Result.ofOption EndConnectionAttemptError.OfferNotFound
+        let! connectionAttempt =
+            connectionAttemptId
+            |> connectionAttemptStore.Get
+            |> Result.ofOption EndConnectionAttemptError.ConnectionAttemptNotFound
 
-        // Check if the client is in the connection attempt
-        match connId = connAttempt.InitiatorConnectionId with
+        // Check if the player is in the connection attempt
+        match playerId = connectionAttempt.InitiatorConnectionId with
         | true -> ()
         | false ->
-            do! connAttempt.Answerer
+            do! connectionAttempt.Answerer
                 |> Result.ofOption EndConnectionAttemptError.NotParticipant
-                |> Result.bind ((=) connId >> Result.requireTrue EndConnectionAttemptError.NotParticipant)
+                |> Result.bind ((=) playerId >> Result.requireTrue EndConnectionAttemptError.NotParticipant)
 
         // Remove connection attempt
-        do! connAttemptStore.Remove connAttemptId
-            |> Result.requireTrue EndConnectionAttemptError.FailedToRemoveOffer
+        do! connectionAttemptStore.Remove connectionAttemptId
+            |> Result.requireTrue EndConnectionAttemptError.FailedToRemoveConnectionAttempt
     }
