@@ -1,6 +1,8 @@
 ﻿module Behide.OnlineServices.Tests.Signaling.Common
 
 open Behide.OnlineServices.Signaling
+open Expecto
+open FsToolkit.ErrorHandling
 
 open System.Text.Json.Serialization
 open System.Threading.Tasks
@@ -11,7 +13,16 @@ open Microsoft.AspNetCore.SignalR
 open Microsoft.AspNetCore.SignalR.Client
 open Microsoft.AspNetCore.TestHost
 
-type SignalingHub(connection: HubConnection) =
+type HandlerSetter(connection: HubConnection) =
+    member _.ConnectionRequested(handler: int -> Task<ConnectionAttemptId | null>) = connection.On<int, ConnectionAttemptId>("ConnectionRequested", handler)
+    member _.ConnectionRequested(handler: int -> ConnectionAttemptId | null) = connection.On<int, ConnectionAttemptId>("ConnectionRequested", handler)
+    member _.SdpAnswerReceived(handler: ConnectionAttemptId -> SdpDescription -> unit) = connection.On<ConnectionAttemptId, SdpDescription>("SdpAnswerReceived", handler)
+    member _.IceCandidateReceived(handler: ConnectionAttemptId -> IceCandidate -> unit) = connection.On<ConnectionAttemptId, IceCandidate>("IceCandidateReceived", handler)
+
+type TestHubClient(connection: HubConnection) =
+    let playerId = connection.ConnectionId |> PlayerId.fromHubConnectionId
+    let handlerSetter = HandlerSetter(connection)
+
     interface ISignalingHub with
         member _.StartConnectionAttempt sdpDescription       = connection.InvokeAsync<_>("StartConnectionAttempt", sdpDescription)
         member _.JoinConnectionAttempt  offerId              = connection.InvokeAsync<_>("JoinConnectionAttempt",  offerId)
@@ -35,10 +46,12 @@ type SignalingHub(connection: HubConnection) =
     member this.LeaveRoom()     = (this :> ISignalingHub).LeaveRoom()
     member this.ConnectToRoomPlayers() = (this :> ISignalingHub).ConnectToRoomPlayers()
 
-    member _.PlayerId = connection.ConnectionId |> PlayerId.fromHubConnectionId
+    member _.PlayerId = playerId
+    member _.SetHandlerFor = handlerSetter
+    member _.Connection = connection
 
 
-let connectHub (testServer: TestServer) : Task<HubConnection * SignalingHub> =
+let connectHub (testServer: TestServer) : Task<TestHubClient> =
     let httpConnectionOptions (options: HttpConnectionOptions) =
         options.HttpMessageHandlerFactory <- fun _ -> testServer.CreateHandler()
 
@@ -57,5 +70,5 @@ let connectHub (testServer: TestServer) : Task<HubConnection * SignalingHub> =
 
     task {
         do! connection.StartAsync()
-        return connection, SignalingHub(connection)
+        return TestHubClient(connection)
     }

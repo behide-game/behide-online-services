@@ -14,11 +14,11 @@ let signalingTests =
 
     testList "Signaling" [
         testTask "Signaling hub connection should success" {
-            let! (connection: HubConnection, _) = testServer |> connectHub
+            let! (hub: TestHubClient) = testServer |> connectHub
 
-            Expect.equal connection.State HubConnectionState.Connected "Should be connected to the hub"
+            Expect.equal hub.Connection.State HubConnectionState.Connected "Should be connected to the hub"
 
-            let playerId = connection.ConnectionId |> PlayerId.fromHubConnectionId
+            let playerId = hub.Connection.ConnectionId |> PlayerId.fromHubConnectionId
             let player =
                 playerConnStore.Get playerId
                 |> Flip.Expect.wantSome "Client should be registered in the player connections store"
