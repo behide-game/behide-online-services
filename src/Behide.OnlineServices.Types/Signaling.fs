@@ -162,6 +162,7 @@ open Errors
 // Otherwise, the library TypedSignalR.Client generate invalid C# code
 type ISignalingHub =
     abstract member StartConnectionAttempt : SdpDescription -> Task<Result<ConnAttemptId, StartConnectionAttemptError>>
+    /// Returns the offer sdp desc and allow to send the answer
     abstract member JoinConnectionAttempt : ConnAttemptId -> Task<Result<SdpDescription, JoinConnectionAttemptError>>
     abstract member SendAnswer : ConnAttemptId -> answer: SdpDescription -> Task<Result<unit, SendAnswerError>>
     abstract member SendIceCandidate : ConnAttemptId -> iceCandidate: IceCandidate -> Task<Result<unit, SendIceCandidateError>>

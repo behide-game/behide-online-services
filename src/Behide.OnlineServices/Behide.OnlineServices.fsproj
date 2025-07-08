@@ -7,7 +7,10 @@
         <ProjectReference Include="../Behide.OnlineServices.Types/Behide.OnlineServices.Types.fsproj" />
         <Compile Include="Helpers.fs" />
         <Compile Include="Stores.fs" />
-        <Compile Include="Hubs/Signaling.fs" />
+        <Compile Include="Hubs\Signaling\Common.fs" />
+        <Compile Include="Hubs\Signaling\RoomManagement.fs" />
+        <Compile Include="Hubs\Signaling\WebRTCSignaling.fs" />
+        <Compile Include="Hubs\Signaling\Signaling.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
