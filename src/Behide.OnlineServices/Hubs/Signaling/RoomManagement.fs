@@ -47,7 +47,7 @@ let createRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: 
         return room.Id
     }
 
-let joinRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) (roomId: RoomId) =
+let joinRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) (roomId: RoomId) = // TODO: Add concurrency test
     taskResult {
         let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
@@ -60,22 +60,19 @@ let joinRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IC
         do! player.Room |> Result.requireNone JoinRoomError.PlayerAlreadyInARoom
 
         // Update room
-        let! newPeerId = lock roomStore (fun () -> taskResult { // TODO: Use semaphore
-            let! room =
-                roomId
-                |> roomStore.Get
-                |> Result.ofOption JoinRoomError.RoomNotFound
+        let! room =
+            roomId
+            |> roomStore.Get
+            |> Result.ofOption JoinRoomError.RoomNotFound
+        do! room.Semaphore.WaitAsync() // Lock to prevent several players having the same peerId
+        let newPeerId =
+            room.Players
+            |> Seq.maxBy _.Value // Max by peerId
+            |> _.Value
+            |> (+) 1
 
-            // Update room
-            let newPeerId =
-                room.Players
-                |> Seq.maxBy _.Value // Max by peerId
-                |> _.Value
-                |> (+) 1
-
-            room.Players.Add(playerId, newPeerId)
-            return newPeerId
-        })
+        room.Players.Add(playerId, newPeerId)
+        room.Semaphore.Release() |> ignore
 
         // Update player connection
         let newPlayerConn = { player with Room = Some {| Id = roomId; PeerId = newPeerId |} }
@@ -193,7 +190,7 @@ let connectToRoomPlayers (hub: Hub) (playerStore: IPlayerStore) (_connectionAtte
                  FailedCreations = failed |> List.toArray }
     }
 
-let leaveRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) =
+let leaveRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IConnectionAttemptStore) (roomStore: IRoomStore) = // TODO: Add tests (ex: Leave while another is connecting)
     taskResult {
         let playerId = hub.Context.ConnectionId |> PlayerId.fromHubConnectionId
 
@@ -203,27 +200,25 @@ let leaveRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: I
             |> playerStore.Get
             |> Result.ofOption LeaveRoomError.PlayerNotFound
 
-        do! lock roomStore (fun _ -> taskResult {
-            // Get player's room
-            let! room =
-                player.Room
-                |> Option.bind (_.Id >> roomStore.Get)
-                |> Result.ofOption LeaveRoomError.NotInARoom
+        let! room =
+            player.Room
+            |> Option.bind (_.Id >> roomStore.Get)
+            |> Result.ofOption LeaveRoomError.NotInARoom
+        do! room.Semaphore.WaitAsync()
+        match room.Players.Count with
+        | 1 -> // If the player is the last one in the room, remove the room
+            do! roomStore.Remove room.Id
+                |> Result.requireTrue LeaveRoomError.FailedToRemoveRoom
 
-            match room.Players.Count with
-            | 1 -> // If the player is the last one in the room, remove the room
-                do! roomStore.Remove room.Id
-                    |> Result.requireTrue LeaveRoomError.FailedToRemoveRoom
+        | _ ->
+            // Remove player connections and player from room
+            room.Connections.RemoveWhere(fun connection ->
+                playerId |> Pair.isInPair connection
+            ) |> ignore
 
-            | _ ->
-                // Remove player connections and player from room
-                room.Connections.RemoveWhere(fun connection ->
-                    playerId |> Pair.isInPair connection
-                ) |> ignore
-
-                do! room.Players.Remove(playerId)
-                    |> Result.requireTrue LeaveRoomError.FailedToUpdateRoom
-        })
+            do! room.Players.Remove(playerId)
+                |> Result.requireTrue LeaveRoomError.FailedToUpdateRoom
+        room.Semaphore.Release() |> ignore
 
         // Update player connection
         do! playerStore.Update
