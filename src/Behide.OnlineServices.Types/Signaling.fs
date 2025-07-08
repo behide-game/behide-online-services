@@ -68,9 +68,7 @@ type RoomId =
 /// A room, also a group of players that are connected to each other
 type Room =
     { Id: RoomId
-      Initiator: PlayerId
-      /// <summary>Player peer ids by player id</summary>
-      /// <remarks>Contains the initiator</remarks>
+      /// Player peer ids by player id
       Players: Dictionary<PlayerId, int>
       /// A list of the connections between the peers
       Connections: HashSet<PlayerId Pair>

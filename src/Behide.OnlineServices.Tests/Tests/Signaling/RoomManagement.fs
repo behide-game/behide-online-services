@@ -1,4 +1,4 @@
-﻿module Behide.OnlineServices.Tests.Signaling.RoomManagement
+module Behide.OnlineServices.Tests.Signaling.RoomManagement
 
 open Expecto
 open FsToolkit.ErrorHandling
@@ -90,11 +90,6 @@ let tests testServer (roomStore: Hubs.Signaling.IRoomStore) =
                 Expect.equal peerId 2 "Peer ID should be 2 in that case"
 
                 // Check if the room contains both players
-                Expect.equal
-                    hub1.PlayerId
-                    room.Initiator
-                    "Room initiator should be the first player connection id"
-
                 Expect.containsAll
                     room.Players
                     [ KeyValuePair(hub1.PlayerId, 1)

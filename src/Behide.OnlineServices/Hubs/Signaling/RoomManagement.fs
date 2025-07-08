@@ -1,4 +1,4 @@
-﻿module Behide.OnlineServices.Hubs.Signaling.RoomManagement
+module Behide.OnlineServices.Hubs.Signaling.RoomManagement
 
 open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
@@ -27,7 +27,6 @@ let createRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: 
         // Create room
         let room =
             { Id = RoomId.create ()
-              Initiator = playerId
               Players = [ KeyValuePair(playerId, 1) ] |> Dictionary // Host peer id should always be 1
               Connections = HashSet()
               ConnectionsInProgress = HashSet()
