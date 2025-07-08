@@ -3,16 +3,7 @@ namespace Behide.OnlineServices.Signaling
 open System
 open System.Collections.Generic
 open System.Threading.Tasks
-
-type Pair<'T when 'T: comparison> = // TODO: Add tests
-    { First: 'T; Second: 'T }
-
-module Pair =
-    let create first second =
-        { First = min first second
-          Second = max first second }
-
-    let isInPair pair value = pair.First = value || pair.Second = value
+open Behide.OnlineServices
 
 type SdpDescription =
     { ``type``: string
@@ -65,13 +56,14 @@ type RoomId =
         |> RoomId
 
     static member tryParse (str: string) =
+        let loweredStr = str.ToLowerInvariant()
         let validStr =
-            str.Length = 4
-            && str |> Seq.forall (fun char -> Array.contains char chars)
+            loweredStr.Length = 4
+            && loweredStr |> Seq.forall (fun char -> Array.contains char chars)
 
         match validStr with
         | false -> None
-        | true -> RoomId str |> Some
+        | true -> RoomId loweredStr |> Some
 
 /// A room, also a group of players that are connected to each other
 type Room =

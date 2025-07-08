@@ -10,6 +10,8 @@
 
     <Compile Include="Common.fs" />
 
+    <Compile Include="Tests\Types.fs" />
+
     <Compile Include="Tests\Signaling\Common.fs" />
     <Compile Include="Tests\Signaling\RoomManagement.fs" />
     <Compile Include="Tests\Signaling\WebRTCSignaling.fs" />
