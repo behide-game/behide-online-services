@@ -1,39 +1,31 @@
 module Behide.OnlineServices.Tests.Common
 
-open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
-open Microsoft.AspNetCore.TestHost
-open Microsoft.Extensions.DependencyInjection
-open Falco.Extensions
-
+open Microsoft.AspNetCore.Mvc.Testing
 open Behide.OnlineServices
 open Behide.OnlineServices.Signaling
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Logging
+
+type AppFactory() =
+    inherit WebApplicationFactory<Program>()
+
+    override _.ConfigureWebHost(builder: IWebHostBuilder) =
+        builder
+            .UseEnvironment("Testing")
+            .ConfigureLogging(fun logging -> // Disable server logs
+                logging.ClearProviders() |> ignore
+                logging.SetMinimumLevel(LogLevel.None) |> ignore
+            )
+        |> ignore
 
 let createTestServer () =
-    let connectionAttemptStore = ConnectionAttemptStore()
-    let roomStore = RoomStore()
-    let playerConnStore = PlayerStore()
+    let app = new AppFactory()
 
-    let hostBuilder =
-        WebHostBuilder()
-            .ConfigureServices(fun services ->
-                services |> Program.configureServices |> ignore
-                services.AddSingleton<IConnectionAttemptStore>(connectionAttemptStore) |> ignore
-                services.AddSingleton<IRoomStore>(roomStore) |> ignore
-                services.AddSingleton<IPlayerStore>(playerConnStore) |> ignore
-            )
-            .Configure(fun app ->
-                app.UseRouting()
-                    .UseEndpoints(fun endpoints ->
-                        endpoints.MapHub<Behide.OnlineServices.Hubs.Signaling.SignalingHub>("/webrtc-signaling") |> ignore
-                    )
-                    .UseFalco(Program.appEndpoints) |> ignore
-            )
-
-    new TestServer(hostBuilder),
-    connectionAttemptStore :> Store.IStore<_, _>,
-    roomStore :> Store.IStore<_, _>,
-    playerConnStore :> Store.IStore<_, _>
+    app.Server,
+    app.Services.GetService<IConnectionAttemptStore>() :> Store.IStore<_, _>,
+    app.Services.GetService<IRoomStore>() :> Store.IStore<_, _>,
+    app.Services.GetService<IPlayerStore>() :> Store.IStore<_, _>
 
 let fakeSdpDescription: SdpDescription =
     { ``type`` = "fake type"
