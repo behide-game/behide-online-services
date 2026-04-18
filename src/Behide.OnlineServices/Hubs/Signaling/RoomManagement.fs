@@ -64,11 +64,20 @@ let joinRoom (hub: Hub) (playerStore: IPlayerStore) (_connectionAttemptStore: IC
             |> roomStore.Get
             |> Result.ofOption JoinRoomError.RoomNotFound
         do! room.Semaphore.WaitAsync() // Lock to prevent several players having the same peerId
+
+        // Find a peer id to fill a gap between ids
+        // For instance, if the ids are 1, 2, 4 -> we select 3
         let newPeerId =
-            room.Players
-            |> Seq.maxBy _.Value // Max by peerId
-            |> _.Value
-            |> (+) 1
+            let max = room.Players.Values |> Seq.max
+
+            seq { 1..max-1 } |> Seq.tryFind (fun id ->
+                room.Players.Values
+                |> Seq.contains id
+                |> not
+            )
+            |> function
+                | Some id -> id
+                | None -> max+1
 
         room.Players.Add(playerId, newPeerId)
         room.Semaphore.Release() |> ignore
